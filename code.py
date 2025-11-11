@@ -9,12 +9,30 @@ print("welcome to pin chechouts")
 # 1. right B is pullup, right C is ground ; check signal on B
 # 2. C as VCC, left A is ground, check signal on B (if VCC : either tip is unpressed or lame is not touching, if ground, we're on target)
 
+# hardware:
+# display : Adafruit 64x32 matrix, specifically https://www.adafruit.com/product/2277
+# controller : adafruit matrixportal S3 https://www.adafruit.com/product/5778
+# buzzer : TBA
+# 3d printed piece to hold banana jacks
+# 3d printed piece to hold the display upright
+# 2.2kOhm pull up resistors for the weapon lines.
+
+# NOTE: currently this is foil specific ; i see no reason the flow can't be adapted to epee or sabre,
+# but, 1. we may be running out of lines for the strip and 2. the (necesssary?) hardware pullups may
+# make it weapon specifc, so that we'll need some additional hardware (switch, an i2c controlled matrix etc)
+# to accommodate that.
+
 import time
 import board
 from collections import deque
 from digitalio import DigitalInOut, Direction, Pull
 
+# if set to true, we'll disable the internal pullups (which are 45kOhm, too weak really),
+# and rely on external ones;
+HAVE_EXTERNAL_PULLUPS = True
 
+
+# TODO: organize this better.
 right_A = DigitalInOut(board.D18)
 right_B = DigitalInOut(board.D8)
 right_C = DigitalInOut(board.A1)
@@ -42,24 +60,23 @@ last_time = time.monotonic_ns()
 
 # this is too slow - about 10 msec worst case!!
 # (and is probably wrong - i wrote it before thinking through it a bit more.)
-if False:
 # while True:
-    last_time = time.monotonic_ns()
-    for name, (pin1, pin2) in (
-            ("right tip", (right_A, right_B)),
-            ("left tip", (left_A, left_B)),
-            ("right lame", (right_A, right_C)),
-            ("left lame", (left_A, left_C)),
-            ):
-        print(name)
-        pin1.switch_to_input(pull = Pull.UP)
-        pin2.switch_to_output(value=False)
-        res = pin1.value
-        pin1.switch_to_input(pull = None)
-        pin2.switch_to_input(pull= None)
-        delta_msec = (time.monotonic_ns() - last_time) / 1e6
-        deltas.append(delta_msec)
-        print(f"since last {delta_msec=:0.2f} msec, {res=}, {max(deltas)=:0.2f} msec")
+#     last_time = time.monotonic_ns()
+#     for name, (pin1, pin2) in (
+#             ("right tip", (right_A, right_B)),
+#             ("left tip", (left_A, left_B)),
+#             ("right lame", (right_A, right_C)),
+#             ("left lame", (left_A, left_C)),
+#             ):
+#         print(name)
+#         pin1.switch_to_input(pull = Pull.UP)
+#         pin2.switch_to_output(value=False)
+#         res = pin1.value
+#         pin1.switch_to_input(pull = None)
+#         pin2.switch_to_input(pull= None)
+#         delta_msec = (time.monotonic_ns() - last_time) / 1e6
+#         deltas.append(delta_msec)
+#         print(f"since last {delta_msec=:0.2f} msec, {res=}, {max(deltas)=:0.2f} msec")
 
 
 # below seems to work, but 1. ~ 4msec worst case, barely acceptable, and
@@ -69,9 +86,15 @@ weapon_lines = {"right" : right_B, "left" : left_B}
 lame_lines = {"right" : right_A, "left" : left_A}
 common_lines = {"right" : right_C, "left" : left_C}
 
-# weapon lines are pulled up (and normally grounded when the tip is not depressed)
+# weapon lines are pulled up (and normally grounded when the tip is not depressed, for foil.)
 for side in ("right", "left"):
-    weapon_lines[side].switch_to_input(pull= Pull.UP)
+    if HAVE_EXTERNAL_PULLUPS:
+        print("Relying on external pullups on the weapon lines.")
+        weapon_lines[side].switch_to_input(pull= None)
+    else:
+        print("No external pullups, will try to use the internal ones.")
+        weapon_lines[side].switch_to_input(pull= Pull.UP)
+
 
 status = {
     "right": {"touch": False, "valid" : False},
@@ -91,6 +114,7 @@ while True:
         lame_lines[other_side].switch_to_output(value = False)
         status[side]["valid"] = not weapon_lines[side].value
         lame_lines[other_side].switch_to_input(pull= None)
+
         delta_msec = (time.monotonic_ns() - last_time) / 1e6
         deltas.append(delta_msec)
         print(f"since last {delta_msec=:0.2f} msec, {status=}, {max(deltas)=:0.2f} msec")
