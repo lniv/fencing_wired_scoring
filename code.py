@@ -13,6 +13,7 @@ print("welcome to pin chechouts")
 # display : Adafruit 64x32 matrix, specifically https://www.adafruit.com/product/2277
 # controller : adafruit matrixportal S3 https://www.adafruit.com/product/5778
 # buzzer : TBA
+# banana jacks : e.g. Cinch PN 108-0903-001
 # 3d printed piece to hold banana jacks
 # 3d printed piece to hold the display upright
 # 2.2kOhm pull up resistors for the weapon lines.
@@ -26,6 +27,7 @@ import time
 import board
 from collections import deque
 from digitalio import DigitalInOut, Direction, Pull
+import pwmio
 
 # if set to true, we'll disable the internal pullups (which are 45kOhm, too weak really),
 # and rely on external ones;
@@ -48,6 +50,8 @@ right_C = DigitalInOut(board.A1)
 left_A = DigitalInOut(board.A4)
 left_B = DigitalInOut(board.A3)
 left_C = DigitalInOut(board.A2)
+
+buzzer = pwmio.PWMOut(board.A0, frequency=2500, duty_cycle=0)
 
 all_pins = (right_A, right_B, right_C, left_A, left_B, left_C)
 for i, pin in enumerate(all_pins):
@@ -167,7 +171,9 @@ class FencingStaus():
         # TODO: beep! we need to announce that the action is over!
         print(f"End of action, {self.status=}")
         self.reset_status()
+        buzzer.duty_cycle = 65535 // 2
         time.sleep(1)  # may want to make this configurable?
+        buzzer.duty_cycle = 0
 
     def run_forever(self):
         t0_nsec = time.monotonic_ns()
