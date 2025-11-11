@@ -31,6 +31,15 @@ from digitalio import DigitalInOut, Direction, Pull
 # and rely on external ones;
 HAVE_EXTERNAL_PULLUPS = True
 
+# set to true to just print the status to console, and do nothing else; i.e. bringup.
+STATE_TESTING = False
+
+# some rule driven constants
+# reference in theory : https://static.fie.org/uploads/37/185366-technical%20rules%20ang.pdf
+# but i'm finding it hard to find anything there with actual timings!
+lockout_msec = 300
+min_touch_msec = 10  # really debounce, not in rulebook, though i thought it was.
+
 
 # TODO: organize this better.
 right_A = DigitalInOut(board.D18)
@@ -96,25 +105,107 @@ for side in ("right", "left"):
         weapon_lines[side].switch_to_input(pull= Pull.UP)
 
 
-status = {
+# bringup testing; should be in a util somewhere.
+if STATE_TESTING:
+    status = {
     "right": {"touch": False, "valid" : False},
     "left" : {"touch" : False, "valid" : False}
     }
+    while True:
+        last_time = time.monotonic_ns()
+        # 1. right B is pullup, right C is ground ; check signal on B
+        # 2. C as VCC, left A is ground, check signal on B (if VCC : either tip is unpressed or lame is not touching, if ground, we're on target - decided not to do that at the end.). NOTE: might be worth to instead of switching to floating inputs, to have a larger resistor on the lames and set to VCC? maybe faster.
+        # also - drop the convenience function and set things directly?
+        for side, other_side in (("right", "left"), ("left", "right")):
+            common_lines[side].switch_to_output(value = False)
+            status[side]["touch"] = weapon_lines[side].value
+            common_lines[side].switch_to_input(pull= None)
 
-while True:
-    last_time = time.monotonic_ns()
-    # 1. right B is pullup, right C is ground ; check signal on B
-    # 2. C as VCC, left A is ground, check signal on B (if VCC : either tip is unpressed or lame is not touching, if ground, we're on target - decided not to do that at the end.). NOTE: might be worth to instead of switching to floating inputs, to have a larger resistor on the lames and set to VCC? maybe faster.
-    # also - drop the convenience function and set things directly?
-    for side, other_side in (("right", "left"), ("left", "right")):
-        common_lines[side].switch_to_output(value = False)
-        status[side]["touch"] = weapon_lines[side].value
-        common_lines[side].switch_to_input(pull= None)
+            lame_lines[other_side].switch_to_output(value = False)
+            status[side]["valid"] = not weapon_lines[side].value
+            lame_lines[other_side].switch_to_input(pull= None)
 
-        lame_lines[other_side].switch_to_output(value = False)
-        status[side]["valid"] = not weapon_lines[side].value
-        lame_lines[other_side].switch_to_input(pull= None)
+            delta_msec = (time.monotonic_ns() - last_time) / 1e6
+            deltas.append(delta_msec)
+            print(f"since last {delta_msec=:0.2f} msec, {status=}, {max(deltas)=:0.2f} msec")
 
-        delta_msec = (time.monotonic_ns() - last_time) / 1e6
-        deltas.append(delta_msec)
-        print(f"since last {delta_msec=:0.2f} msec, {status=}, {max(deltas)=:0.2f} msec")
+
+# here the usual loop goes.
+# yes, i should split the file etc, but this is mean more as a stream of conciousness development
+# than neat and maintainable - it's pretty short so far, and i want to use it with kids.
+
+
+class FencingStaus():
+    def __init__(self):
+        print("Start fencing")
+        self.reset_status()
+
+    def reset_status(self):
+        # TODO: deepcopy to a last result, so we can reply it.
+        self.status = {
+            "right": {"touch_started_msec": None, "valid" : False, "announced" : False},
+            "left" : {"touch_started_msec": None, "valid" : False, "announced" : False}
+            }
+
+    def announce(self, side):
+        """
+        light up the board when someone had a (debounced) touch.
+        Args:
+            side: which side did something, "right" or "left"
+        """
+        # don't announce more than once per action, duh.
+        if self.status[side]["announced"]:
+            return
+        self.status[side]["announced"] = True
+        print(f"Detected touch on {side}, {self.status[side]=}")
+
+    def end_action(self):
+        """
+        let'em know, then reset the status.
+        if we want a delay before we allow the action to start, it should be here.
+        """
+        # TODO: beep! we need to announce that the action is over!
+        print(f"End of action, {self.status=}")
+        self.reset_status()
+        time.sleep(1)  # may want to make this configurable?
+
+    def run_forever(self):
+        t0_nsec = time.monotonic_ns()
+        # look for a tocuh; if it's real (i.e. passes debounce), then start a clock.
+        # in the same manner, once we're touching, check validity - it has to persist for the same amount of time.
+        # once we decide we have a valid touch, we use the clock to wait till the lockout time expired, at which
+        # point we decide of the status (lights)
+        while True:
+            now_msec = (time.monotonic_ns() - t0_nsec) / 1e6
+            # check first if we had one or more valid touches, and the time has expired.
+            for side in ("right", "left"):
+                if self.status[side]["announced"] and now_msec - self.status[side]["touch_started_msec"] > lockout_msec:
+                    self.end_action()
+                    continue
+
+            for side, other_side in (("right", "left"), ("left", "right")):
+                # first figure out if the top is depressed, and if it's on valid / on target.
+                # note that this is really the only weapon (hardware) specific section.
+                common_lines[side].switch_to_output(value = False)
+                touch = weapon_lines[side].value
+                common_lines[side].switch_to_input(pull= None)
+                lame_lines[other_side].switch_to_output(value = False)
+                valid_target = not weapon_lines[side].value
+                lame_lines[other_side].switch_to_input(pull= None)
+
+                if touch:
+                    if self.status[side]["touch_started_msec"] is None:
+                        self.status[side]["touch_started_msec"] = now_msec
+                        self.status[side]["valid"] = valid_target
+                    else:
+                        # must remain touching for it to be valid.
+                        self.status[side]["valid"] &= valid_target
+                    if now_msec - self.status[side]["touch_started_msec"] > min_touch_msec:
+                        self.announce(side)
+                # i.e. once we we had a touch we leave the time unmodified till the end of the action.
+                elif not self.status[side]["announced"]:
+                    self.status[side]["touch_started_msec"] = None
+
+
+fencer_status = FencingStaus()
+fencer_status.run_forever()
