@@ -212,6 +212,8 @@ class FencingStaus():
             pass
         self.erase_display()
 
+    # i create convenience methods for each of the four cases to make some of this explicit.
+    # you can make it more efficient, vector or map things etc.
     def display_image_sequence(self, display_each_sec = 0.5):
         """
         display the four parts, so we can see what the results will show up as.
@@ -228,6 +230,7 @@ class FencingStaus():
             tic_ns = time.monotonic_ns()
             while time.monotonic_ns() - tic_ns <= display_each_nanosec:
                 pass
+        self.erase_display()
 
     def display_left_valid(self):
         self._add_image('/red_32x32.bmp', 0, 0)
@@ -259,6 +262,18 @@ class FencingStaus():
             return
         self.status[side]["announced"] = True
         print(f"Detected touch on {side}, {self.status[side]=}")
+        if side == "right":
+            if self.status[side]["valid"]:
+                self.display_right_valid()
+            else:
+                self.display_right_invalid()
+        elif side == "left":
+            if self.status[side]["valid"]:
+                self.display_left_valid()
+            else:
+                self.display_left_invalid()
+        else:
+            raise KeyError(f"{side=} which is not left or right, WTF.")
 
     def end_action(self):
         """
@@ -271,6 +286,7 @@ class FencingStaus():
         buzzer.duty_cycle = 65535 // 2
         time.sleep(1)  # may want to make this configurable?
         buzzer.duty_cycle = 0
+        self.erase_display()
 
     def run_forever(self):
         t0_nsec = time.monotonic_ns()
@@ -312,6 +328,4 @@ class FencingStaus():
 
 # actually execute stuff...
 fencer_status = FencingStaus()
-while True:
-    fencer_status.display_image_sequence()
-#fencer_status.run_forever()
+fencer_status.run_forever()
