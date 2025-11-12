@@ -29,6 +29,11 @@ from collections import deque
 from digitalio import DigitalInOut, Direction, Pull
 import pwmio
 
+import displayio
+import rgbmatrix
+import framebufferio
+
+
 # if set to true, we'll disable the internal pullups (which are 45kOhm, too weak really),
 # and rely on external ones;
 HAVE_EXTERNAL_PULLUPS = True
@@ -138,11 +143,103 @@ if STATE_TESTING:
 # yes, i should split the file etc, but this is mean more as a stream of conciousness development
 # than neat and maintainable - it's pretty short so far, and i want to use it with kids.
 
-
 class FencingStaus():
     def __init__(self):
         print("Start fencing")
         self.reset_status()
+        self.prep_display()
+        self.display_logo()
+        self.display_image_sequence()
+
+    def prep_display(self):
+        displayio.release_displays()
+        self.screen_size = (64, 32)
+        matrix = rgbmatrix.RGBMatrix(
+            width=64, bit_depth=4,
+            rgb_pins=[
+                board.MTX_R1,
+                board.MTX_G1,
+                board.MTX_B1,
+                board.MTX_R2,
+                board.MTX_G2,
+                board.MTX_B2
+            ],
+            addr_pins=[
+                board.MTX_ADDRA,
+                board.MTX_ADDRB,
+                board.MTX_ADDRC,
+                board.MTX_ADDRD
+            ],
+            clock_pin=board.MTX_CLK,
+            latch_pin=board.MTX_LAT,
+            output_enable_pin=board.MTX_OE
+        )
+        self.display = framebufferio.FramebufferDisplay(matrix)
+        self.root_group = displayio.Group()
+        self.display.root_group = self.root_group
+
+    def erase_display(self):
+        """
+        Remove all elements from our display's root group
+        """
+        while len(self.root_group) > 0:
+            self.root_group.pop()
+
+    # i could use text and shapes, but these all require libraries, which mean more prep.
+    # i could fine a use for it, but minimal use only needs 4 images:
+    # "FOIL" to display mode (well, not strictly necessary)
+    # a red and green 32x32 rectangles
+    # a white "X".
+    def _add_image(self, filename, x, y):
+        """
+        Display a given file at a given location on our screen
+        """
+        bitmap = displayio.OnDiskBitmap(filename)
+        tile = displayio.TileGrid(bitmap, pixel_shader=bitmap.pixel_shader, x= x, y =y)
+        self.root_group.append(tile)
+        # Wait for the image to load.
+        self.display.refresh(target_frames_per_second=60)
+
+    def display_logo(self, time_sec = 0.5):
+        """
+        flash the class logo for a given amount of time, then erase the screen
+        """
+        time_nsec = time_sec * 1e9
+        self.erase_display()
+        self._add_image('/foil_icon.bmp', 0, 0)
+        tic_ns = time.monotonic_ns()
+        while time.monotonic_ns() - tic_ns <= time_nsec:
+            pass
+        self.erase_display()
+
+    def display_image_sequence(self, display_each_sec = 0.5):
+        """
+        display the four parts, so we can see what the results will show up as.
+        """
+        display_each_nanosec = display_each_sec * 1e9
+        for f in (
+                self.display_left_valid,
+                self.display_right_valid,
+                self.display_right_invalid,
+                self.display_left_invalid
+                ):
+            self.erase_display()
+            f()
+            tic_ns = time.monotonic_ns()
+            while time.monotonic_ns() - tic_ns <= display_each_nanosec:
+                pass
+
+    def display_left_valid(self):
+        self._add_image('/red_32x32.bmp', 0, 0)
+
+    def display_right_valid(self):
+        self._add_image('/green_32x32.bmp', int(self.screen_size[0] / 2), 0)
+
+    def display_left_invalid(self):
+        self._add_image("/white_X_32x32.bmp", 0, 0)
+
+    def display_right_invalid(self):
+        self._add_image("/white_X_32x32.bmp", int(self.screen_size[0] / 2), 0)
 
     def reset_status(self):
         # TODO: deepcopy to a last result, so we can reply it.
@@ -213,5 +310,8 @@ class FencingStaus():
                     self.status[side]["touch_started_msec"] = None
 
 
+# actually execute stuff...
 fencer_status = FencingStaus()
-fencer_status.run_forever()
+while True:
+    fencer_status.display_image_sequence()
+#fencer_status.run_forever()
