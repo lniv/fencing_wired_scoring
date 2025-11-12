@@ -63,24 +63,25 @@ for i, pin in enumerate(all_pins):
 # below seems to work, but 1. ~ 4msec worst case, barely acceptable, and
 # 2. the built in pullups really are too weak - even holding a wire from the oppsite lame to the tip registers.
 # i'll try addding a real 1kohm pullup.
-weapon_lines = {"right" : right_B, "left" : left_B}
-lame_lines = {"right" : right_A, "left" : left_A}
-common_lines = {"right" : right_C, "left" : left_C}
+weapon_lines = {"right": right_B, "left": left_B}
+lame_lines = {"right": right_A, "left": left_A}
+common_lines = {"right": right_C, "left": left_C}
 
 # weapon lines are pulled up (and normally grounded when the tip is not depressed, for foil.)
 for side in ("right", "left"):
     if HAVE_EXTERNAL_PULLUPS:
         print("Relying on external pullups on the weapon lines.")
-        weapon_lines[side].switch_to_input(pull= None)
+        weapon_lines[side].switch_to_input(pull=None)
     else:
         print("No external pullups, will try to use the internal ones.")
-        weapon_lines[side].switch_to_input(pull= Pull.UP)
+        weapon_lines[side].switch_to_input(pull=Pull.UP)
 
 
 # yes, i should split the file etc, but this is mean more as a stream of conciousness development
 # than neat and maintainable - it's pretty short so far, and i want to use it with kids.
 
-class FencingStaus():
+
+class FencingStaus:
     def __init__(self):
         print("Setting up")
         self.reset_status()
@@ -92,24 +93,25 @@ class FencingStaus():
         displayio.release_displays()
         self.screen_size = (64, 32)
         matrix = rgbmatrix.RGBMatrix(
-            width=64, bit_depth=4,
+            width=64,
+            bit_depth=4,
             rgb_pins=[
                 board.MTX_R1,
                 board.MTX_G1,
                 board.MTX_B1,
                 board.MTX_R2,
                 board.MTX_G2,
-                board.MTX_B2
+                board.MTX_B2,
             ],
             addr_pins=[
                 board.MTX_ADDRA,
                 board.MTX_ADDRB,
                 board.MTX_ADDRC,
-                board.MTX_ADDRD
+                board.MTX_ADDRD,
             ],
             clock_pin=board.MTX_CLK,
             latch_pin=board.MTX_LAT,
-            output_enable_pin=board.MTX_OE
+            output_enable_pin=board.MTX_OE,
         )
         self.display = framebufferio.FramebufferDisplay(matrix)
         self.root_group = displayio.Group()
@@ -132,18 +134,18 @@ class FencingStaus():
         Display a given file at a given location on our screen
         """
         bitmap = displayio.OnDiskBitmap(filename)
-        tile = displayio.TileGrid(bitmap, pixel_shader=bitmap.pixel_shader, x= x, y =y)
+        tile = displayio.TileGrid(bitmap, pixel_shader=bitmap.pixel_shader, x=x, y=y)
         self.root_group.append(tile)
         # Wait for the image to load.
         self.display.refresh(target_frames_per_second=60)
 
-    def display_logo(self, time_sec = 0.5):
+    def display_logo(self, time_sec=0.5):
         """
         flash the class logo for a given amount of time, then erase the screen
         """
         time_nsec = time_sec * 1e9
         self.erase_display()
-        self._add_image('/foil_icon.bmp', 0, 0)
+        self._add_image("/foil_icon.bmp", 0, 0)
         tic_ns = time.monotonic_ns()
         while time.monotonic_ns() - tic_ns <= time_nsec:
             pass
@@ -151,17 +153,17 @@ class FencingStaus():
 
     # i create convenience methods for each of the four cases to make some of this explicit.
     # you can make it more efficient, vector or map things etc.
-    def display_image_sequence(self, display_each_sec = 0.5):
+    def display_image_sequence(self, display_each_sec=0.5):
         """
         display the four parts, so we can see what the results will show up as.
         """
         display_each_nanosec = display_each_sec * 1e9
         for f in (
-                self.display_left_valid,
-                self.display_right_valid,
-                self.display_right_invalid,
-                self.display_left_invalid
-                ):
+            self.display_left_valid,
+            self.display_right_valid,
+            self.display_right_invalid,
+            self.display_left_invalid,
+        ):
             self.erase_display()
             f()
             tic_ns = time.monotonic_ns()
@@ -170,10 +172,10 @@ class FencingStaus():
         self.erase_display()
 
     def display_left_valid(self):
-        self._add_image('/red_32x32.bmp', 0, 0)
+        self._add_image("/red_32x32.bmp", 0, 0)
 
     def display_right_valid(self):
-        self._add_image('/green_32x32.bmp', int(self.screen_size[0] / 2), 0)
+        self._add_image("/green_32x32.bmp", int(self.screen_size[0] / 2), 0)
 
     def display_left_invalid(self):
         self._add_image("/white_X_32x32.bmp", 0, 0)
@@ -184,9 +186,9 @@ class FencingStaus():
     def reset_status(self):
         # TODO: deepcopy to a last result, so we can reply it.
         self.status = {
-            "right": {"touch_started_msec": None, "valid" : False, "announced" : False},
-            "left" : {"touch_started_msec": None, "valid" : False, "announced" : False}
-            }
+            "right": {"touch_started_msec": None, "valid": False, "announced": False},
+            "left": {"touch_started_msec": None, "valid": False, "announced": False},
+        }
 
     def announce(self, side):
         """
@@ -235,19 +237,23 @@ class FencingStaus():
             now_msec = (time.monotonic_ns() - t0_nsec) / 1e6
             # check first if we had one or more valid touches, and the time has expired.
             for side in ("right", "left"):
-                if self.status[side]["announced"] and now_msec - self.status[side]["touch_started_msec"] > lockout_msec:
+                if (
+                    self.status[side]["announced"]
+                    and now_msec - self.status[side]["touch_started_msec"]
+                    > lockout_msec
+                ):
                     self.end_action()
                     continue
 
             for side, other_side in (("right", "left"), ("left", "right")):
                 # first figure out if the top is depressed, and if it's on valid / on target.
                 # note that this is really the only weapon (hardware) specific section.
-                common_lines[side].switch_to_output(value = False)
+                common_lines[side].switch_to_output(value=False)
                 touch = weapon_lines[side].value
-                common_lines[side].switch_to_input(pull= None)
-                lame_lines[other_side].switch_to_output(value = False)
+                common_lines[side].switch_to_input(pull=None)
+                lame_lines[other_side].switch_to_output(value=False)
                 valid_target = not weapon_lines[side].value
-                lame_lines[other_side].switch_to_input(pull= None)
+                lame_lines[other_side].switch_to_input(pull=None)
 
                 if touch:
                     if self.status[side]["touch_started_msec"] is None:
@@ -256,7 +262,10 @@ class FencingStaus():
                     else:
                         # must remain touching for it to be valid.
                         self.status[side]["valid"] &= valid_target
-                    if now_msec - self.status[side]["touch_started_msec"] > min_touch_msec:
+                    if (
+                        now_msec - self.status[side]["touch_started_msec"]
+                        > min_touch_msec
+                    ):
                         self.announce(side)
                 # i.e. once we we had a touch we leave the time unmodified till the end of the action.
                 elif not self.status[side]["announced"]:
