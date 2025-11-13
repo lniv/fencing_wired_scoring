@@ -201,18 +201,6 @@ class FencingStaus:
             return
         self.status[side]["announced"] = True
         print(f"Detected touch on {side}, {self.status[side]=}")
-        if side == "right":
-            if self.status[side]["valid"]:
-                self.display_right_valid()
-            else:
-                self.display_right_invalid()
-        elif side == "left":
-            if self.status[side]["valid"]:
-                self.display_left_valid()
-            else:
-                self.display_left_invalid()
-        else:
-            raise KeyError(f"{side=} which is not left or right, WTF.")
 
     def end_action(self):
         """
@@ -221,11 +209,25 @@ class FencingStaus:
         """
         # TODO: beep! we need to announce that the action is over!
         print(f"End of action, {self.status=}")
+        # show whatever results were merited ; "announced" gets set when a touch is detected.
+        # i could condense this of course, but leaving it super explicit / readable.
+        if self.status["right"]["announced"]:
+            if self.status["right"]["valid"]:
+                self.display_right_valid()
+            else:
+                self.display_right_invalid()
+        if self.status["left"]["announced"]:
+            if self.status["left"]["valid"]:
+                self.display_left_valid()
+            else:
+                self.display_left_invalid()
         self.reset_status()
         buzzer.duty_cycle = 65535 // 2
         time.sleep(1)  # may want to make this configurable?
         buzzer.duty_cycle = 0
         self.erase_display()
+        print(f"Since last action, {self.worst_cycle_msec=}")
+        self.worst_cycle_msec = 0
 
     def run_forever(self):
         t0_nsec = time.monotonic_ns()
@@ -233,19 +235,24 @@ class FencingStaus:
         # in the same manner, once we're touching, check validity - it has to persist for the same amount of time.
         # once we decide we have a valid touch, we use the clock to wait till the lockout time expired, at which
         # point we decide of the status (lights)
+        self.worst_cycle_msec = 0
         while True:
             now_msec = (time.monotonic_ns() - t0_nsec) / 1e6
             # check first if we had one or more valid touches, and the time has expired.
-            for side in ("right", "left"):
-                if (
-                    self.status[side]["announced"]
-                    and now_msec - self.status[side]["touch_started_msec"]
-                    > lockout_msec
-                ):
-                    self.end_action()
-                    continue
+            if (
+                self.status["right"]["announced"]
+                and now_msec - self.status["right"]["touch_started_msec"]
+            ) or (
+                self.status["left"]["announced"]
+                and now_msec - self.status["left"]["touch_started_msec"]
+            ):
+                self.end_action()
+                continue
 
             for side, other_side in (("right", "left"), ("left", "right")):
+                # if we have a result for a side, don't continue checking - no need to waste time.
+                if self.status[side]["announced"]:
+                    continue
                 # first figure out if the top is depressed, and if it's on valid / on target.
                 # note that this is really the only weapon (hardware) specific section.
                 common_lines[side].switch_to_output(value=False)
@@ -266,10 +273,14 @@ class FencingStaus:
                         now_msec - self.status[side]["touch_started_msec"]
                         > min_touch_msec
                     ):
+                        # we probably should not put the matrices in the display at this point - it slows us dowb too much.
                         self.announce(side)
-                # i.e. once we we had a touch we leave the time unmodified till the end of the action.
-                elif not self.status[side]["announced"]:
+                else:
                     self.status[side]["touch_started_msec"] = None
+            # the cycle where we end the action does not get measured, which is as it should be.
+            last_cycle_msec = (time.monotonic_ns() - t0_nsec) / 1e6 - now_msec
+            if last_cycle_msec > self.worst_cycle_msec:
+                self.worst_cycle_msec = last_cycle_msec
 
 
 # actually execute stuff...
