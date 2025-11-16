@@ -15,7 +15,9 @@ print("en garde")
 # buzzer : PS1240P02BT (4kHz - if using something else, may want to adjust buzzer frequency)
 # banana jacks : e.g. Cinch PN 108-0903-001
 # 3d printed piece to hold banana jacks
-# 3d printed piece to hold the display upright
+# 3d printed piece(s) to hold the display upright
+# 3d printed piece to holder the buzzer (mounts over the display adapter using a longer M3 screw)
+# a few M3 screws - 12mm long for legs, banana jack mount, 16mm for clamping the buzzer over the latter.
 # 2.2kOhm pull up resistors for the weapon lines.
 
 # NOTE: currently this is foil specific ; i see no reason the flow can't be adapted to epee or sabre,
