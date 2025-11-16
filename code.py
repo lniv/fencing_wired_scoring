@@ -12,7 +12,7 @@ print("en garde")
 # hardware:
 # display : Adafruit 64x32 matrix, specifically https://www.adafruit.com/product/2277
 # controller : adafruit matrixportal S3 https://www.adafruit.com/product/5778
-# buzzer : TBA
+# buzzer : PS1240P02BT (4kHz - if using something else, may want to adjust buzzer frequency)
 # banana jacks : e.g. Cinch PN 108-0903-001
 # 3d printed piece to hold banana jacks
 # 3d printed piece to hold the display upright
@@ -52,7 +52,8 @@ left_A = DigitalInOut(board.A4)
 left_B = DigitalInOut(board.A3)
 left_C = DigitalInOut(board.A2)
 
-buzzer = pwmio.PWMOut(board.A0, frequency=2500, duty_cycle=0)
+# buzzer for end of action ; adjust frequency to hardwawre used.
+buzzer = pwmio.PWMOut(board.A0, frequency=4000, duty_cycle=0)
 
 all_pins = (right_A, right_B, right_C, left_A, left_B, left_C)
 for i, pin in enumerate(all_pins):
@@ -82,12 +83,17 @@ for side in ("right", "left"):
 
 
 class FencingStaus:
+
+    # length of time to play buzzer for end of action.
+    buzzer_time_sec = 1.0
+
     def __init__(self):
         print("Setting up")
         self.reset_status()
         self.prep_display()
         self.display_logo()
         self.display_image_sequence()
+        self.play_buzzer()
 
     def prep_display(self):
         displayio.release_displays()
@@ -123,6 +129,11 @@ class FencingStaus:
         """
         while len(self.root_group) > 0:
             self.root_group.pop()
+
+    def play_buzzer(self):
+        buzzer.duty_cycle = 65535 // 2
+        time.sleep(self.buzzer_time_sec)  # may want to make this configurable?
+        buzzer.duty_cycle = 0
 
     # i could use text and shapes, but these all require libraries, which mean more prep.
     # i could fine a use for it, but minimal use only needs 4 images:
@@ -222,9 +233,7 @@ class FencingStaus:
             else:
                 self.display_left_invalid()
         self.reset_status()
-        buzzer.duty_cycle = 65535 // 2
-        time.sleep(1)  # may want to make this configurable?
-        buzzer.duty_cycle = 0
+        self.play_buzzer()
         self.erase_display()
         print(f"Since last action, {self.worst_cycle_msec=}")
         self.worst_cycle_msec = 0
