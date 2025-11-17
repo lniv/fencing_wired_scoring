@@ -40,10 +40,10 @@ import framebufferio
 HAVE_EXTERNAL_PULLUPS = True
 
 # some rule driven constants
-# reference in theory : https://static.fie.org/uploads/37/185366-technical%20rules%20ang.pdf
-# but i'm finding it hard to find anything there with actual timings!
+# reference :
+# FIE material rules : https://static.fie.org/uploads/34/172612-book%20m%20ang.pdf
 lockout_msec = 300
-min_touch_msec = 10  # really debounce, not in rulebook, though i thought it was.
+min_touch_msec = 14  # techincally 14+-1 msec, but since our cycle time is 2- 5 msec...
 
 
 # TODO: organize this better.
