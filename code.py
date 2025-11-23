@@ -253,9 +253,10 @@ class FencingStaus:
             if (
                 self.status["right"]["announced"]
                 and now_msec - self.status["right"]["touch_started_msec"]
+                >= lockout_msec
             ) or (
                 self.status["left"]["announced"]
-                and now_msec - self.status["left"]["touch_started_msec"]
+                and now_msec - self.status["left"]["touch_started_msec"] >= lockout_msec
             ):
                 self.end_action()
                 continue
