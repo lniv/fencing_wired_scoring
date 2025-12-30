@@ -85,12 +85,24 @@ for side in ("right", "left"):
 
 
 class FencingStaus:
+    """
+    main class handling actions.
+
+    Args:
+        update_images_when_announcing: update display upon hit or only at end of action [False]
+            updating immediately is currently slow enough to be an issue, so defaulting to update
+            only at the end of the action.
+    """
 
     # length of time to play buzzer for end of action.
+    # (but buzzer will sound earlier; total time will be first touch to end of action, plus this.)
     buzzer_time_sec = 1.0
+    # amount of time display remains lit
+    delay_before_reset_sec = 3.0
 
-    def __init__(self):
+    def __init__(self, update_images_when_announcing=False):
         print("Setting up")
+        self.update_images_when_announcing = update_images_when_announcing
         self.reset_status()
         self.prep_display()
         self.display_logo()
@@ -213,29 +225,59 @@ class FencingStaus:
         if self.status[side]["announced"]:
             return
         self.status[side]["announced"] = True
-        print(f"Detected touch on {side}, {self.status[side]=}")
+        # time the action - i want to know how long this is actually taking!
+        announce_start_t = time.monotonic_ns()
+        # now i want to start the buzzer.
+        buzzer.duty_cycle = 65535 // 2
+        # finding out that it takes a large amount of time to display the image - about 20 msec.
+        # this dominates cycle time.
+        # will profile / look for other options.
+        # note that at 20 msec it's still much shorter than human reaction tie, or evenn visual time.
+        # it's just that we're (even more) non adherent to the rules.
+        # i.e. it's enough that at least in theory both can touch "at the same time", for only 20 msec,
+        # and we'd miss the second touch since it expired before we got to the main touching detection again.
+        if self.update_images_when_announcing:
+            # leaving intentionally very explicit
+            if side == "left":
+                if self.status["left"]["valid"]:
+                    self.display_left_valid()
+                else:
+                    self.display_left_invalid()
+            else:
+                if self.status["right"]["valid"]:
+                    self.display_right_valid()
+                else:
+                    self.display_right_invalid()
+        announce_length_msec = (time.monotonic_ns() - announce_start_t) / 1e6
+        print(
+            f"Detected touch on {side}, {self.status[side]=}; took {announce_length_msec:0.3f} msec to display."
+        )
 
     def end_action(self):
         """
         let'em know, then reset the status.
         if we want a delay before we allow the action to start, it should be here.
         """
-        # TODO: beep! we need to announce that the action is over!
         print(f"End of action, {self.status=}")
-        # show whatever results were merited ; "announced" gets set when a touch is detected.
-        # i could condense this of course, but leaving it super explicit / readable.
-        if self.status["right"]["announced"]:
-            if self.status["right"]["valid"]:
-                self.display_right_valid()
-            else:
-                self.display_right_invalid()
-        if self.status["left"]["announced"]:
-            if self.status["left"]["valid"]:
-                self.display_left_valid()
-            else:
-                self.display_left_invalid()
-        self.reset_status()
+        if not self.update_images_when_announcing:
+            # show whatever results were merited ; "announced" gets set when a touch is detected.
+            # i could condense this of course, but leaving it super explicit / readable.
+            if self.status["right"]["announced"]:
+                if self.status["right"]["valid"]:
+                    self.display_right_valid()
+                else:
+                    self.display_right_invalid()
+            if self.status["left"]["announced"]:
+                if self.status["left"]["valid"]:
+                    self.display_left_valid()
+                else:
+                    self.display_left_invalid()
+        # buzzer sounds for some extra time once action ends (lockout could be very short)
         self.play_buzzer()
+        # keep the display up for some additional time.
+        time.sleep(self.delay_before_reset_sec)
+        # now reset all
+        self.reset_status()
         self.erase_display()
         print(f"Since last action, {self.worst_cycle_msec=}")
         self.worst_cycle_msec = 0
