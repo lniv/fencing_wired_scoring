@@ -158,11 +158,21 @@ class FencingStaus:
         """
         Display a given file at a given location on our screen
         """
+        t0 = time.monotonic_ns()
         bitmap = displayio.OnDiskBitmap(filename)
+        dt_bitmap = (time.monotonic_ns() - t0) / 1e6
         tile = displayio.TileGrid(bitmap, pixel_shader=bitmap.pixel_shader, x=x, y=y)
+        dt_tile = (time.monotonic_ns() - t0) / 1e6
         self.root_group.append(tile)
+        dt_append = (time.monotonic_ns() - t0) / 1e6
+        # commenting this out, as it was found to consume the majority of the time - close to 20 msec.
+        # in retrospect, doh.
         # Wait for the image to load.
-        self.display.refresh(target_frames_per_second=60)
+        # self.display.refresh(target_frames_per_second=60)
+        dt_total = (time.monotonic_ns() - t0) / 1e6
+        print(
+            f"Adding {filename}, {dt_bitmap=:0.1f}, {dt_tile=:0.1f}, {dt_append=:0.1f}, {dt_total=:0.1f} msec"
+        )
 
     def display_logo(self, time_sec=0.5):
         """
