@@ -101,7 +101,7 @@ class FencingStaus:
     delay_before_reset_sec = 3.0
 
     def __init__(self, update_images_when_announcing=False):
-        print("Setting up")
+        print(f"Setting up, {update_images_when_announcing=}")
         self.update_images_when_announcing = update_images_when_announcing
         self.reset_status()
         self.prep_display()
