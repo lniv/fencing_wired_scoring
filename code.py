@@ -25,6 +25,7 @@ print("en garde")
 # make it weapon specifc, so that we'll need some additional hardware (switch, an i2c controlled matrix etc)
 # to accommodate that.
 
+import gc
 import time
 import board
 from digitalio import DigitalInOut, Pull
@@ -100,8 +101,19 @@ class FencingStaus:
     # amount of time display remains lit
     delay_before_reset_sec = 3.0
 
-    def __init__(self, update_images_when_announcing=False):
-        print("Setting up")
+    # we have enough ram to keep these in memory, trading memory for speed.
+    # they're a few kB each.
+    # Turned out that having these as part of a function call is expesnive, so trying to
+    # just supply a key and store a map.
+    _bitmaps = {
+        "foil_logo": displayio.OnDiskBitmap("/foil_icon.bmp"),
+        "green": displayio.OnDiskBitmap("/green_32x32.bmp"),
+        "red": displayio.OnDiskBitmap("/red_32x32.bmp"),
+        "white_x": displayio.OnDiskBitmap("/white_X_32x32.bmp"),
+    }
+
+    def __init__(self, update_images_when_announcing=True):
+        print(f"Setting up, {update_images_when_announcing=}")
         self.update_images_when_announcing = update_images_when_announcing
         self.reset_status()
         self.prep_display()
@@ -154,12 +166,17 @@ class FencingStaus:
     # "FOIL" to display mode (well, not strictly necessary)
     # a red and green 32x32 rectangles
     # a white "X".
-    def _add_image(self, filename, x, y):
+    def _add_image(self, name: str, x, y):
         """
         Display a given file at a given location on our screen
+        Args:
+            name: a key to our pre loaded _bitmaps
+            x: coordinate for placing said bitmap
+            y: guess
         """
         t0 = time.monotonic_ns()
-        bitmap = displayio.OnDiskBitmap(filename)
+        bitmap = self._bitmaps[name]
+        # there used to be loading from disk here e.g. displayio.OnDiskBitmap("/foil_icon.bmp")
         dt_bitmap = (time.monotonic_ns() - t0) / 1e6
         tile = displayio.TileGrid(bitmap, pixel_shader=bitmap.pixel_shader, x=x, y=y)
         dt_tile = (time.monotonic_ns() - t0) / 1e6
@@ -171,7 +188,7 @@ class FencingStaus:
         # self.display.refresh(target_frames_per_second=60)
         dt_total = (time.monotonic_ns() - t0) / 1e6
         print(
-            f"Adding {filename}, {dt_bitmap=:0.1f}, {dt_tile=:0.1f}, {dt_append=:0.1f}, {dt_total=:0.1f} msec"
+            f"Adding bitmap, {dt_bitmap=:0.1f}, {dt_tile=:0.1f}, {dt_append=:0.1f}, {dt_total=:0.1f} msec"
         )
 
     def display_logo(self, time_sec=0.5):
@@ -180,7 +197,7 @@ class FencingStaus:
         """
         time_nsec = time_sec * 1e9
         self.erase_display()
-        self._add_image("/foil_icon.bmp", 0, 0)
+        self._add_image("foil_logo", 0, 0)
         tic_ns = time.monotonic_ns()
         while time.monotonic_ns() - tic_ns <= time_nsec:
             pass
@@ -207,16 +224,16 @@ class FencingStaus:
         self.erase_display()
 
     def display_left_valid(self):
-        self._add_image("/red_32x32.bmp", 0, 0)
+        self._add_image("red", 0, 0)
 
     def display_right_valid(self):
-        self._add_image("/green_32x32.bmp", int(self.screen_size[0] / 2), 0)
+        self._add_image("green", int(self.screen_size[0] / 2), 0)
 
     def display_left_invalid(self):
-        self._add_image("/white_X_32x32.bmp", 0, 0)
+        self._add_image("white_x", 0, 0)
 
     def display_right_invalid(self):
-        self._add_image("/white_X_32x32.bmp", int(self.screen_size[0] / 2), 0)
+        self._add_image("white_x", int(self.screen_size[0] / 2), 0)
 
     def reset_status(self):
         # TODO: deepcopy to a last result, so we can reply it.
@@ -291,8 +308,10 @@ class FencingStaus:
         self.erase_display()
         print(f"Since last action, {self.worst_cycle_msec=}")
         self.worst_cycle_msec = 0
+        gc.collect()
 
     def run_forever(self):
+        gc.collect()
         t0_nsec = time.monotonic_ns()
         # look for a tocuh; if it's real (i.e. passes debounce), then start a clock.
         # in the same manner, once we're touching, check validity - it has to persist for the same amount of time.
