@@ -13,18 +13,19 @@ print("en garde")
 # display : Adafruit 64x32 matrix, specifically https://www.adafruit.com/product/2277
 # controller : adafruit matrixportal S3 https://www.adafruit.com/product/5778
 # buzzer : PS1240P02BT (4kHz - if using something else, may want to adjust buzzer frequency)
-# banana jacks : e.g. Cinch PN 108-0903-001
+# banana jacks (for wired setup) : e.g. Cinch PN 108-0903-001
 # 3d printed piece to hold banana jacks
 # 3d printed piece(s) to hold the display upright
 # 3d printed piece to holder the buzzer (mounts over the display adapter using a longer M3 screw)
 # a few M3 screws - 12mm long for legs, banana jack mount, 16mm for clamping the buzzer over the latter.
-# 2.2kOhm pull up resistors for the weapon lines.
+# 2.2kOhm pull up resistors for the weapon lines (for wired setup).
 
 # NOTE: currently this is foil specific ; i see no reason the flow can't be adapted to epee or sabre,
 # but, 1. we may be running out of lines for the strip and 2. the (necesssary?) hardware pullups may
 # make it weapon specifc, so that we'll need some additional hardware (switch, an i2c controlled matrix etc)
 # to accommodate that.
 
+from os import getenv
 import time
 import board
 from digitalio import DigitalInOut, Pull
@@ -34,11 +35,32 @@ import displayio
 import rgbmatrix
 import framebufferio
 
+import socketpool
+import wifi
+
+wireless_minimal_keys = (
+    "wifi_ssid",
+    "wifi_password",
+    "display_ip",
+    "display_port",
+)
+settings = {}
+for name in wireless_minimal_keys:
+    settings[name] = getenv(name)
+    if settings[name] is None:
+        print(f"{name=} not found in settings.toml ; no wireless")
+if set(settings.keys()).issuperset(wireless_minimal_keys):
+    using_wireless = True
+else:
+    using_wireless = False
+print(f"Based on keys existence in settings.toml, {using_wireless=}")
+
 
 # if set to true, we'll disable the internal pullups (which are 45kOhm, too weak really),
 # and rely on external ones;
 HAVE_EXTERNAL_PULLUPS = True
 
+# TODO: move these to the settings.toml file.
 # some rule driven constants
 # reference :
 # FIE material rules : https://static.fie.org/uploads/34/172612-book%20m%20ang.pdf
@@ -292,6 +314,33 @@ class FencingStaus:
         print(f"Since last action, {self.worst_cycle_msec=}")
         self.worst_cycle_msec = 0
 
+    def _check_for_hit(self, now_msec: float):
+        for side, other_side in (("right", "left"), ("left", "right")):
+            # if we have a result for a side, don't continue checking - no need to waste time.
+            if self.status[side]["announced"]:
+                continue
+            # first figure out if the top is depressed, and if it's on valid / on target.
+            # note that this is really the only weapon (hardware) specific section.
+            common_lines[side].switch_to_output(value=False)
+            touch = weapon_lines[side].value
+            common_lines[side].switch_to_input(pull=None)
+            lame_lines[other_side].switch_to_output(value=False)
+            valid_target = not weapon_lines[side].value
+            lame_lines[other_side].switch_to_input(pull=None)
+
+            if touch:
+                if self.status[side]["touch_started_msec"] is None:
+                    self.status[side]["touch_started_msec"] = now_msec
+                    self.status[side]["valid"] = valid_target
+                else:
+                    # must remain touching for it to be valid.
+                    self.status[side]["valid"] &= valid_target
+                if now_msec - self.status[side]["touch_started_msec"] > min_touch_msec:
+                    # we probably should not put the matrices in the display at this point - it slows us dowb too much.
+                    self.announce(side)
+            else:
+                self.status[side]["touch_started_msec"] = None
+
     def run_forever(self):
         t0_nsec = time.monotonic_ns()
         # look for a tocuh; if it's real (i.e. passes debounce), then start a clock.
@@ -312,41 +361,73 @@ class FencingStaus:
             ):
                 self.end_action()
                 continue
-
-            for side, other_side in (("right", "left"), ("left", "right")):
-                # if we have a result for a side, don't continue checking - no need to waste time.
-                if self.status[side]["announced"]:
-                    continue
-                # first figure out if the top is depressed, and if it's on valid / on target.
-                # note that this is really the only weapon (hardware) specific section.
-                common_lines[side].switch_to_output(value=False)
-                touch = weapon_lines[side].value
-                common_lines[side].switch_to_input(pull=None)
-                lame_lines[other_side].switch_to_output(value=False)
-                valid_target = not weapon_lines[side].value
-                lame_lines[other_side].switch_to_input(pull=None)
-
-                if touch:
-                    if self.status[side]["touch_started_msec"] is None:
-                        self.status[side]["touch_started_msec"] = now_msec
-                        self.status[side]["valid"] = valid_target
-                    else:
-                        # must remain touching for it to be valid.
-                        self.status[side]["valid"] &= valid_target
-                    if (
-                        now_msec - self.status[side]["touch_started_msec"]
-                        > min_touch_msec
-                    ):
-                        # we probably should not put the matrices in the display at this point - it slows us dowb too much.
-                        self.announce(side)
-                else:
-                    self.status[side]["touch_started_msec"] = None
+            self._check_for_hit(now_msec)
             # the cycle where we end the action does not get measured, which is as it should be.
             last_cycle_msec = (time.monotonic_ns() - t0_nsec) / 1e6 - now_msec
             if last_cycle_msec > self.worst_cycle_msec:
                 self.worst_cycle_msec = last_cycle_msec
 
 
+class WirelessFencingStatus(FencingStaus):
+    """
+    Detect hits by receiving messages over wifi, rather than wires.
+    welcome to the future, i hope.
+    """
+
+    def __init__(self, update_images_when_announcing=False):
+        super().__init__(update_images_when_announcing)
+        print("Creating access point...")
+        wifi.radio.start_ap(
+            ssid=settings["wifi_ssid"], password=settings["wifi_password"]
+        )
+        print(f"Created access point {settings['wifi_ssid']}")
+        pool = socketpool.SocketPool(wifi.radio)
+        self.sock = pool.socket(pool.AF_INET, pool.SOCK_DGRAM)
+        self.sock.bind((settings["display_ip"], settings["display_port"]))
+
+        print(
+            f"Listening for UDP packets at ({settings['display_ip']}:{settings['display_port']})"
+        )
+        self.last_action_i = {"right": 0, "left": 0}
+
+    def _check_for_hit(self, now_msec):
+        try:
+            buffer = bytearray(1024)
+            num_bytes, remote_address = self.sock.recvfrom_into(buffer)
+            if num_bytes > 0:
+                data = buffer[:num_bytes].decode(
+                    "utf-8"
+                )  # Slice the buffer to the actual data length
+                # e.g.
+                # 49222.1406; 0.3438; right, touched, 3, True
+                t_sent, dt, msg = data.split(";")
+                side, action, action_i, valid = msg.split(",")
+                side = side.strip(" ")
+                action = action.strip(" ")
+                valid = valid.strip(" ")
+                if not side in ("right", "left"):
+                    raise ValueError(f"{msg} must start with right or left.")
+                if action == "touched":
+                    action_i = int(action_i)
+                    # check that we can't accidentally invalidate something when we reset the fencer boxes?
+                    if self.last_action_i[side] != action_i:
+                        print(f"we got {side=}, {action=}, {valid=}.")
+                        self.last_action_i[side] = action_i
+                        dt = float(dt)
+                        self.status[side]["touch_started_msec"] = now_msec - dt
+                        self.status[side]["valid"] = True if valid == "True" else False
+                        self.announce(side)
+                else:
+                    print(
+                        f"Got {data=} from {remote_address}, not a touch, no special handling."
+                    )
+        except Exception as e:
+            print(f"Error during reception: {e}")
+
+
 # actually execute stuff...
-fencer_status = FencingStaus()
+if using_wireless:
+    fencer_status = WirelessFencingStatus()
+else:
+    fencer_status = FencingStaus()
 fencer_status.run_forever()
