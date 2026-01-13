@@ -10,12 +10,25 @@ wifi_password = "count 2 say blue"
 display_ip = "192.168.4.1"
 display_port = 5000
 
+# for wired setups:
+# if positive, we'll disable the internal pullups (which are 45kOhm, too weak really),
+# and rely on external ones. Zero might make sense for non esp32-s3 hardware.
+HAVE_EXTERNAL_PULLUPS = 1
+
 fencer = "right"  # or left, but nothing else - and we'll complain!
 
 # items below this line shouldn't be edited in general.
 # NOTE: you can't use floats directly due to the subset of toml implemented by circuitpython.
 sampling_rate_Hz = 100000
-sampling_time_sec = "0.014"  # probably should be the same as the minimal valid touch time.
+
+# reference :
+# FIE material rules : https://static.fie.org/uploads/34/172612-book%20m%20ang.pdf
+lockout_msec = 300
+# techincally 14+-1 msec.
+# Allowing for sampling_time_sec != min_touch_msec, but in practice should probably be the same.
+sampling_time_sec = "0.014"
+min_touch_msec = 14
+
 # i'm ok with these being integers,
 left_Hz = 7000
 right_Hz = 8000

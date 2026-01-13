@@ -55,18 +55,13 @@ else:
     using_wireless = False
 print(f"Based on keys existence in settings.toml, {using_wireless=}")
 
-
-# if set to true, we'll disable the internal pullups (which are 45kOhm, too weak really),
-# and rely on external ones;
-HAVE_EXTERNAL_PULLUPS = True
-
-# TODO: move these to the settings.toml file.
-# some rule driven constants
-# reference :
-# FIE material rules : https://static.fie.org/uploads/34/172612-book%20m%20ang.pdf
-lockout_msec = 300
-min_touch_msec = 14  # techincally 14+-1 msec, but since our cycle time is 2- 5 msec...
-
+lockout_msec = getenv("lockout_msec")
+if lockout_msec is None:
+    raise KeyError(f"lockout_msec must be defined in settings.toml")
+min_touch_msec = getenv("min_touch_msec")
+if min_touch_msec is None:
+    raise KeyError(f"min_touch_msec must be defined in settings.toml")
+print(f"Using {lockout_msec=} and {min_touch_msec=}")
 
 # TODO: organize this better.
 right_A = DigitalInOut(board.D18)
@@ -93,13 +88,20 @@ lame_lines = {"right": right_A, "left": left_A}
 common_lines = {"right": right_C, "left": left_C}
 
 # weapon lines are pulled up (and normally grounded when the tip is not depressed, for foil.)
-for side in ("right", "left"):
-    if HAVE_EXTERNAL_PULLUPS:
-        print("Relying on external pullups on the weapon lines.")
-        weapon_lines[side].switch_to_input(pull=None)
-    else:
-        print("No external pullups, will try to use the internal ones.")
-        weapon_lines[side].switch_to_input(pull=Pull.UP)
+if not using_wireless:
+    # if true, we'll disable the internal pullups and need external ones.
+    # for my board, these is necessary.
+
+    HAVE_EXTERNAL_PULLUPS = getenv("HAVE_EXTERNAL_PULLUPS")
+    if HAVE_EXTERNAL_PULLUPS is None:
+        raise ValueError(f"Must define HAVE_EXTERNAL_PULLUPS in settings.toml")
+    for side in ("right", "left"):
+        if HAVE_EXTERNAL_PULLUPS > 0:
+            print(f"{side} relying on external pullups on the weapon line.")
+            weapon_lines[side].switch_to_input(pull=None)
+        else:
+            print(f"{side} no external pullups, will try to use the internal ones.")
+            weapon_lines[side].switch_to_input(pull=Pull.UP)
 
 
 # yes, i should split the file etc, but this is mean more as a stream of conciousness development
