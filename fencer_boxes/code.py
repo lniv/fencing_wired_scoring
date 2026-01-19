@@ -37,6 +37,8 @@ import socketpool
 from os import getenv
 
 
+# standardize on using monotonic_ns as integer, and have times in millisec.
+
 print("Reading from settings.toml")
 # before we do anything else, lets see that we have a sane defintioins file.
 # i could set loops etc here, but keeping names explicit makes the IDE's life easier.
@@ -48,14 +50,14 @@ for name in (
     "display_port",
     "fencer",
     "sampling_rate_Hz",
-    "sampling_time_sec",
+    "sampling_time_msec",
     "left_Hz",
     "right_Hz",
     "min_valid_power",
-    "lockout_time_sec",
-    "dormant_after_hit_sec",
-    "message_repeat_min_sec",
-    "message_repeat_max_sec",
+    "send_touch_for_msec",
+    "dormant_after_hit_msec",
+    "message_repeat_min_msec",
+    "message_repeat_max_msec",
 ):
     settings[name] = getenv(name)
     if settings[name] is None:
@@ -75,19 +77,22 @@ else:
 
 # we have a few floating point values, that due to the circuitpython toml limitations,
 # must be loaded as ints. i might just change ot defining them otherwise...
-for name in (
-    "sampling_time_sec",
-    "min_valid_power",
-    "lockout_time_sec",
-    "dormant_after_hit_sec",
-    "message_repeat_min_sec",
-    "message_repeat_max_sec",
-):
+# (i had more than one value, is swear...)
+for name in ("min_valid_power",):
     settings[name] = float(settings[name])
     if settings[name] <= 0:
         raise ValueError(f"{name} must be a positive value.")
 
 target_address = (settings["display_ip"], settings["display_port"])
+
+# i'm using these with sleep later, and would prefer to not convert them each time.
+message_repeat_min_sec = settings["message_repeat_min_msec"] / 1000
+message_repeat_max_sec = settings["message_repeat_max_msec"] / 1000
+dormant_after_hit_sec = settings["dormant_after_hit_msec"] / 1000
+send_touch_for_ns = settings["send_touch_for_msec"] * 1e6
+print(
+    f"{dormant_after_hit_sec=}, {send_touch_for_ns=}, repeating every {message_repeat_min_sec:0.3f} to {message_repeat_max_sec:0.3f} sec"
+)
 
 print("settings.toml looks sane; proceeding.")
 
@@ -156,38 +161,49 @@ def goertzel_algorithm(samples, sample_rate, target_frequency):
 
 # i could make it take e.g. a data class instance, but i'm worried about speed
 # and don't want to bother profiling; for now there aren't many messages, so i think ok.
-def send_msg(msg: str, t_msg: float, send_for_sec: float = 0) -> bool:
+def send_msg(msg: str, t_msg_ns: int, send_for_nanosec: int = 0) -> bool:
     """
     send a message to the display - which will have to parse it; simple string.
     Args:
         msg: send this to our display.
-        t_msg: when it happened.
-        send_for_sec: will continue sending till t_msg + this expires, randomly.
+        t_msg_ns: when it happened, in nanosec.
+        send_for_nanosec: will continue sending till t_msg + this expires, randomly.
     Returns:
         True if it managed to get through, False otherwise.
     """
-    t_m1 = time.monotonic()
+    t_m1_ns = time.monotonic_ns()
     # TODO: refactor this so i don't have to create it each time?
     sock = pool.socket(pool.AF_INET, pool.SOCK_DGRAM)
-    print(f"Took {(time.monotonic() - t_m1):0.5f} sec to create socket.")
+    print(
+        f"Took {(1e-6 * (time.monotonic_ns() - t_m1_ns)):0.1f} msec to create socket."
+    )
     n_sent = 0
     try:
         # send once, then if we have tine, repeat.
-        while n_sent < 1 or time.monotonic() - t_msg < send_for_sec:
-            t_now = time.monotonic()
+        while n_sent < 1 or time.monotonic_ns() - t_msg_ns < send_for_nanosec:
+            t_now_ns = time.monotonic_ns()
+            n_sent += 1
+            # times are in nanosec, since it's native. we usually will deal with millisec for humans.
+            # dropping spaces for easier processing, at the expense of humans.
             sock.sendto(
-                f"{t_msg:0.4f}; {t_now - t_msg:0.4f}; {msg}".encode("utf-8"),
+                f"{t_msg_ns};{t_now_ns - t_msg_ns};{n_sent};{msg}".encode("utf-8"),
                 target_address,
             )
-            t1 = time.monotonic()
-            print(f"{n_sent=}, {(t_now - t_msg)=:0.4f}, {(t1 - t_msg)=:0.4f} sec")
+            t1_ns = time.monotonic_ns()
+            print(f"{n_sent=}, {(t_now_ns - t_msg_ns)=}, {(t1_ns - t_msg_ns)=} nanosec")
             time.sleep(
                 random.uniform(
-                    settings["message_repeat_min_sec"],
-                    settings["message_repeat_max_sec"],
+                    message_repeat_min_sec,
+                    message_repeat_max_sec,
                 )
             )
-            n_sent += 1
+    except OSError as e:
+        if e.args[0] == 118:  # EHOSTUNREACH ; try to reconnect
+            print(f"Got {e=}, will try to reconnect.")
+            try:
+                connect_to_display()
+            except Exception as e:
+                print(f"Failed to reconnect due to {e}")
     except Exception as e:
         print(f"Error sending event: {e}")
     return n_sent > 0
@@ -195,36 +211,37 @@ def send_msg(msg: str, t_msg: float, send_for_sec: float = 0) -> bool:
 
 ############## network setup
 
-print("Connecting to WiFi")
-#  connect to your SSID
-try:
-    wifi.radio.connect(settings["wifi_ssid"], settings["wifi_password"])
-except TypeError:
-    print("Could not find WiFi info. Check your settings.toml file!")
-    raise
-print("Connected to WiFi")
 
+def connect_to_display():
+    ssid = settings["wifi_ssid"]
+    passwd = settings["wifi_password"]
+    print(f"Connecting to {ssid=}, {passwd=}")
+    wifi.radio.connect(ssid, passwd)
+    print("Connected to WiFi")
+
+
+connect_to_display()
 pool = socketpool.SocketPool(wifi.radio)
 
 #  prints MAC address to REPL
 print("My MAC addr:", [hex(i) for i in wifi.radio.mac_address])
 #  prints IP address to REPL
 print(f"My IP address is {wifi.radio.ipv4_address}")
-send_msg(f"{we_are}, Just woke up, 0, None.", time.monotonic())
+send_msg(f"{we_are},Just woke up,0,None.", time.monotonic_ns())
 
 
 ############## end network stuff
 # future / TODO: heartbeat to display / server, get time sync from server?
-sampling_time_sec = settings["sampling_time_sec"]
+sampling_time_sec = settings["sampling_time_msec"] * 1e-3
 sampling_rate = settings["sampling_rate_Hz"]
 array_length = int(sampling_time_sec * sampling_rate)
 print(f"sampling for {sampling_time_sec=}, {sampling_rate=}, N={array_length}")
-mybuffer = array.array("H", [0x0000] * array_length)
+adc_read_buffer = array.array("H", [0x0000] * array_length)
 
-t0 = time.monotonic()
-ready_msg = f"{we_are}, now in business - looking for hits, 0, None"
-print(t0, ready_msg)
-send_msg(ready_msg, t0, 0)
+t0_ns = time.monotonic_ns()
+ready_msg = f"{we_are},now in business - looking for hits,0,None"
+print(t0_ns, ready_msg)
+send_msg(ready_msg, t0_ns, 0)
 
 
 def is_tip_depressed():
@@ -235,38 +252,43 @@ def is_tip_depressed():
     tip_B_pull_up_pin.switch_to_output(value=True)
     touch = tip_B_sense_pin.value  # foil : circuit opens upon touch.
     tip_B_pull_up_pin.switch_to_input(pull=None)
+    # work around for RP2350 errata E9 - the pin latches up without an external
+    # pulldown smaller than 8.2K !!
+    # since pulling it down to ground changes our protection, i'd rather do this.
+    tip_B_sense_pin.switch_to_output(value=False)
+    tip_B_sense_pin.switch_to_input(pull=None)
     return touch
 
 
 touch_i = 0
 while True:
-    t_now = time.monotonic()
+    t_now_ns = time.monotonic_ns()
     if is_tip_depressed():
         with analogbufio.BufferedIn(board.GP26, sample_rate=sampling_rate) as adcbuf:
-            adcbuf.readinto(mybuffer)
+            adcbuf.readinto(adc_read_buffer)
         pow = goertzel_algorithm(
-            mybuffer, sample_rate=sampling_rate, target_frequency=target_freq
+            adc_read_buffer, sample_rate=sampling_rate, target_frequency=target_freq
         )
         if not is_tip_depressed():
             print("failed to find tip still pressed after checking validity, no touch.")
             continue
         touch_i += 1
-        msg = f"{we_are}, touched, {touch_i}, {pow >= settings['min_valid_power']}"
-        # send for the lockout perfiod; in case it wasn't received.
-        send_msg(msg, t_now, settings["lockout_time_sec"])
-        print(t_now, msg + f"; {pow=}")
-        sleep_t = settings["dormant_after_hit_sec"] - (time.monotonic() - t_now)
-        print(f"sleeping for {sleep_t:0.3f} sec")
-        time.sleep(sleep_t)
-        # work around for RP2350 errata E9 - the pin latches up without an external
-        # pulldown smaller than 8.2K !!
-        # since pulling it down to ground changes our protection, i'd rather do this.
-        tip_B_sense_pin.switch_to_output(value=False)
-        tip_B_sense_pin.switch_to_input(pull=None)
-        post_announce_t = time.monotonic()
-        msg = f"{we_are}, Sent hit - slept - back in business, {touch_i}, False"
-        print(post_announce_t, msg)
-        send_msg(msg, post_announce_t)
+        msg = f"{we_are},touched,{touch_i},{pow >= settings['min_valid_power']}"
+        # send, willing to repeat for some amount of time.
+        send_msg(msg, t_now_ns, send_touch_for_ns)
+        time_since_press_sec = (time.monotonic_ns() - t_now_ns) / 1e9
+        # print(t_now_ns, time_since_press_sec, msg + f"; {pow=}")
+        # print(f"{time_since_press_sec=:0.4f} {dormant_after_hit_sec=:0.2f}")
+        sleep_t = dormant_after_hit_sec - time_since_press_sec
+        if sleep_t <= 0:
+            print(f"Something is odd - {sleep_t=} <= 0; skipping sleep.")
+        else:
+            print(f"sleeping for {sleep_t:0.3f} sec")
+            time.sleep(sleep_t)
+        post_announce_t_ns = time.monotonic_ns()
+        msg = f"{we_are},Sent hit - slept - back in business,{touch_i},False"
+        print(post_announce_t_ns, msg)
+        send_msg(msg, post_announce_t_ns)
     else:
         pass
         # print(f"{touch_i=}, no touch")

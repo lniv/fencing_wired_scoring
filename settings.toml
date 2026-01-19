@@ -1,7 +1,4 @@
-# you need to edit this section
-# NOTE: I am not committing real values here, obviously.
-# BUT, when i shift to running the display, the default will be useable.
-# if you want more than one system, change this!
+# if you want more than one system, change wireless ssid at least.
 
 # for a standalone display.
 wifi_ssid = "fencing1"
@@ -13,27 +10,34 @@ display_port = 5000
 # for wired setups:
 # if positive, we'll disable the internal pullups (which are 45kOhm, too weak really),
 # and rely on external ones. Zero might make sense for non esp32-s3 hardware.
+# no effect for wireless setups.
 HAVE_EXTERNAL_PULLUPS = 1
 
+# for (wireless) fencer boxes (the display will ignore this.)
 fencer = "right"  # or left, but nothing else - and we'll complain!
 
 # items below this line shouldn't be edited in general.
 # NOTE: you can't use floats directly due to the subset of toml implemented by circuitpython.
+# so float values are given as strings and converted in code, and i've tried to avoid it mostly.
 sampling_rate_Hz = 100000
+
+buzzer_time_msec = 1000
+# amount of time display remains lit
+delay_before_display_reset_msec = 3000
 
 # reference :
 # FIE material rules : https://static.fie.org/uploads/34/172612-book%20m%20ang.pdf
 lockout_msec = 300
+send_touch_for_msec = 125
 # techincally 14+-1 msec.
-# Allowing for sampling_time_sec != min_touch_msec, but in practice should probably be the same.
-sampling_time_sec = "0.014"
+# Allowing for sampling_time_msec != min_touch_msec, but in practice should probably be the same.
+sampling_time_msec = 14
 min_touch_msec = 14
 
 # i'm ok with these being integers,
 left_Hz = 7000
 right_Hz = 8000
 min_valid_power = "5e10"
-lockout_time_sec = "0.3"  # this shouldn't really be here? it's the responsibility of the display / server / arbitrator.
-dormant_after_hit_sec = "3.0"
-message_repeat_min_sec = "0.01"
-message_repeat_max_sec = "0.05"
+dormant_after_hit_msec = 3000
+message_repeat_min_msec = 10
+message_repeat_max_msec = 50

@@ -38,13 +38,37 @@ import framebufferio
 import socketpool
 import wifi
 
+
+settings = {}
+# we have a few keys we must have defined.
+required_keys = (
+    "lockout_msec",
+    "min_touch_msec",
+    "buzzer_time_msec",
+    "delay_before_display_reset_msec",
+)
+for key in required_keys:
+    settings[key] = getenv(key)
+    if settings[key] is None:
+        raise KeyError(f"{key} must be defined in settings.toml")
+# for now, just set variables; i'll go to using settings directly later.
+lockout_msec = settings["lockout_msec"]
+min_touch_msec = settings["min_touch_msec"]
+if "send_touch_for_msec" in settings:
+    touch_sent_for_msec = settings["send_touch_for_msec"]
+else:
+    touch_sent_for_msec = 0
+print(f"Using {lockout_msec=}, {min_touch_msec=} and {touch_sent_for_msec=}")
+
+
+print(f"Checking if we're operating wirelessly.")
 wireless_minimal_keys = (
     "wifi_ssid",
     "wifi_password",
     "display_ip",
     "display_port",
+    "send_touch_for_msec",
 )
-settings = {}
 for name in wireless_minimal_keys:
     settings[name] = getenv(name)
     if settings[name] is None:
@@ -55,13 +79,6 @@ else:
     using_wireless = False
 print(f"Based on keys existence in settings.toml, {using_wireless=}")
 
-lockout_msec = getenv("lockout_msec")
-if lockout_msec is None:
-    raise KeyError(f"lockout_msec must be defined in settings.toml")
-min_touch_msec = getenv("min_touch_msec")
-if min_touch_msec is None:
-    raise KeyError(f"min_touch_msec must be defined in settings.toml")
-print(f"Using {lockout_msec=} and {min_touch_msec=}")
 
 # TODO: organize this better.
 right_A = DigitalInOut(board.D18)
@@ -118,13 +135,14 @@ class FencingStaus:
             only at the end of the action.
     """
 
-    # length of time to play buzzer for end of action.
-    # (but buzzer will sound earlier; total time will be first touch to end of action, plus this.)
-    buzzer_time_sec = 1.0
-    # amount of time display remains lit
-    delay_before_reset_sec = 3.0
-
     def __init__(self, update_images_when_announcing=False):
+        # length of time to play buzzer for end of action.
+        # (but buzzer will sound earlier; total time will be first touch to end of action, plus this.)
+        self.buzzer_time_sec = settings["buzzer_time_msec"] / 1000
+        # amount of time display remains lit
+        self.delay_before_display_reset_sec = (
+            settings["delay_before_display_reset_msec"] / 1000
+        )
         print(f"Setting up, {update_images_when_announcing=}")
         self.update_images_when_announcing = update_images_when_announcing
         self.reset_status()
@@ -309,7 +327,7 @@ class FencingStaus:
         # buzzer sounds for some extra time once action ends (lockout could be very short)
         self.play_buzzer()
         # keep the display up for some additional time.
-        time.sleep(self.delay_before_reset_sec)
+        time.sleep(self.delay_before_display_reset_sec)
         # now reset all
         self.reset_status()
         self.erase_display()
@@ -350,18 +368,25 @@ class FencingStaus:
         # once we decide we have a valid touch, we use the clock to wait till the lockout time expired, at which
         # point we decide of the status (lights)
         self.worst_cycle_msec = 0
+        # if we're wireless, we should only end the action after lockout + max sending delay.
+        # in this case we're relying on self._check_for_hit to only mark a hit if we're within
+        # the lockout time.
+        max_msec_before_closing_action = lockout_msec + touch_sent_for_msec
         while True:
             now_msec = (time.monotonic_ns() - t0_nsec) / 1e6
             # check first if we had one or more valid touches, and the time has expired.
             if (
                 self.status["right"]["announced"]
                 and now_msec - self.status["right"]["touch_started_msec"]
-                >= lockout_msec
+                >= max_msec_before_closing_action
             ) or (
                 self.status["left"]["announced"]
-                and now_msec - self.status["left"]["touch_started_msec"] >= lockout_msec
+                and now_msec - self.status["left"]["touch_started_msec"]
+                >= max_msec_before_closing_action
             ):
                 self.end_action()
+                # maybe make sure to shut off the buzzer here? i've seen an odd occasional crash that ends with no images and continuous buzzer.
+                # also - add a heartbeat (console with end= "\r", and maybe a blinking dot on screen, or LED - though that may be slow.)
                 continue
             self._check_for_hit(now_msec)
             # the cycle where we end the action does not get measured, which is as it should be.
@@ -385,6 +410,12 @@ class WirelessFencingStatus(FencingStaus):
         print(f"Created access point {settings['wifi_ssid']}")
         pool = socketpool.SocketPool(wifi.radio)
         self.sock = pool.socket(pool.AF_INET, pool.SOCK_DGRAM)
+        # setting timeout to 0.001 sec or below gets me an OSError(11)
+        # a larger time gets me a timeout error (when there is no data)
+        # which is more useful.
+        self.sock.settimeout(
+            0.0011
+        )  # non blocking. (do we need to handle the exception on timeout?)
         self.sock.bind((settings["display_ip"], settings["display_port"]))
 
         print(
@@ -395,34 +426,52 @@ class WirelessFencingStatus(FencingStaus):
     def _check_for_hit(self, now_msec):
         try:
             buffer = bytearray(1024)
+            # todo: time this (the buffer etc creation.), if i can.
             num_bytes, remote_address = self.sock.recvfrom_into(buffer)
             if num_bytes > 0:
                 data = buffer[:num_bytes].decode(
                     "utf-8"
                 )  # Slice the buffer to the actual data length
-                # e.g.
-                # 49222.1406; 0.3438; right, touched, 3, True
-                t_sent, dt, msg = data.split(";")
+                # we get e.g.
+                # 3054491455081;1220707;1;right,Sent hit - slept - back in business,2,False
+                t_sent, dt_ns, repeat_i, msg = data.split(";")
                 side, action, action_i, valid = msg.split(",")
-                side = side.strip(" ")
-                action = action.strip(" ")
-                valid = valid.strip(" ")
                 if not side in ("right", "left"):
                     raise ValueError(f"{msg} must start with right or left.")
                 if action == "touched":
                     action_i = int(action_i)
                     # check that we can't accidentally invalidate something when we reset the fencer boxes?
                     if self.last_action_i[side] != action_i:
-                        print(f"we got {side=}, {action=}, {valid=}.")
+                        print(
+                            f"we got {side=}, {action=}, {valid=}, {repeat_i=} (at {t_sent})"
+                        )
+                        # first, ensure we don't handle this one again.
+                        # (i could hange this, but the case where we get a later message
+                        # with a better time seems far fetched.)
                         self.last_action_i[side] = action_i
-                        dt = float(dt)
-                        self.status[side]["touch_started_msec"] = now_msec - dt
+                        dt_msec = float(dt_ns) * 1e-6
+                        time_of_hit = now_msec - dt_msec
+                        # if the other side announced, see if we're within the valid time!
+                        other_side = "left" if side == "right" else "right"
+                        if self.status[other_side]["touch_started_msec"] is not None:
+                            other_side_time_of_hit = self.status[other_side][
+                                "touch_started_msec"
+                            ]
+                            if time_of_hit - other_side_time_of_hit > lockout_msec:
+                                print(
+                                    f"{side} reported hit at {time_of_hit:0.1f} msec, but {other_side} hit at {other_side_time_of_hit:0.1f} msec, MOVE FASTER."
+                                )
+                                return
+                        self.status[side]["touch_started_msec"] = time_of_hit
                         self.status[side]["valid"] = True if valid == "True" else False
                         self.announce(side)
                 else:
                     print(
                         f"Got {data=} from {remote_address}, not a touch, no special handling."
                     )
+        except OSError as e:
+            if e.args[0] != 116:  # ETIMEDOUT as expected.
+                raise (e)
         except Exception as e:
             print(f"Error during reception: {e}")
 

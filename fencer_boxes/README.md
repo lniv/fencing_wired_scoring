@@ -12,7 +12,7 @@ Obviously you'd need two of these. Oveall, they're a combination of a picow (RP2
 ## Software setup
 * Install circuitpython onto the board; for a pico2w, [https://circuitpython.org/board/raspberry_pi_pico2_w/]
 * copy [code.py](./code.py) onto the board
-* copy the [settings.toml](./settings.toml) file onto the board AND modify it to select either "left" or "right" side.
+* copy the [settings.toml from the parent folder](../settings.toml) file onto the board AND modify it to select either "left" or "right" side.
 
 ## TODO:
 * Add step files for suitable hardware boxes
