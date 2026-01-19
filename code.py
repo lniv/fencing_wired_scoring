@@ -429,6 +429,29 @@ class WirelessFencingStatus(FencingStaus):
         )
         self.last_action_i = {"right": 0, "left": 0}
 
+    def end_action(self):
+        super().end_action()
+        # i want to clear any messages in the queue.
+        buffer = bytearray(1024)
+        t0 = time.monotonic_ns()
+        # hard limit to 0.1 sec
+        while time.monotonic_ns() - t0 < 1e8:
+            try:
+                num_bytes = self.sock.recv_into(buffer)
+                if num_bytes > 0:
+                    print(
+                        f"{time.monotonic_ns()/1e9:0.2f} post action, found {num_bytes} in sockets."
+                    )
+                else:
+                    break
+            except OSError as e:
+                if e.args[0] != 116:  # ETIMEDOUT as expected.
+                    raise (e)
+                else:
+                    # if we have a timeout, we're done.
+                    break
+        print("socket clear, reset finished\n\n")
+
     def _check_for_hit(self, now_msec):
         try:
             buffer = bytearray(1024)
