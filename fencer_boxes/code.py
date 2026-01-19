@@ -220,7 +220,17 @@ def connect_to_display():
     print("Connected to WiFi")
 
 
-connect_to_display()
+print(f"Initial connection to display AP")
+while True:
+    try:
+        connect_to_display()
+        break
+    except ConnectionError as e:
+        print(
+            f"t = {(time.monotonic_ns() / 1e9):0.1f} sec: Failed to connect to display due to {e}, will wait 5 sec then retry."
+        )
+        time.sleep(5)
+
 pool = socketpool.SocketPool(wifi.radio)
 
 #  prints MAC address to REPL
