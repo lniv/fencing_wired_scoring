@@ -54,11 +54,6 @@ for key in required_keys:
 # for now, just set variables; i'll go to using settings directly later.
 lockout_msec = settings["lockout_msec"]
 min_touch_msec = settings["min_touch_msec"]
-if "send_touch_for_msec" in settings:
-    touch_sent_for_msec = settings["send_touch_for_msec"]
-else:
-    touch_sent_for_msec = 0
-print(f"Using {lockout_msec=}, {min_touch_msec=} and {touch_sent_for_msec=}")
 
 
 print(f"Checking if we're operating wirelessly.")
@@ -75,9 +70,12 @@ for name in wireless_minimal_keys:
         print(f"{name=} not found in settings.toml ; no wireless")
 if set(settings.keys()).issuperset(wireless_minimal_keys):
     using_wireless = True
+    touch_sent_for_msec = settings["send_touch_for_msec"]
 else:
     using_wireless = False
+    touch_sent_for_msec = 0
 print(f"Based on keys existence in settings.toml, {using_wireless=}")
+print(f"Using {lockout_msec=}, {min_touch_msec=} and {touch_sent_for_msec=}")
 
 
 # TODO: organize this better.
@@ -371,7 +369,15 @@ class FencingStaus:
         # if we're wireless, we should only end the action after lockout + max sending delay.
         # in this case we're relying on self._check_for_hit to only mark a hit if we're within
         # the lockout time.
-        max_msec_before_closing_action = lockout_msec + touch_sent_for_msec
+        if touch_sent_for_msec > 0:
+            max_msec_before_closing_action = lockout_msec + touch_sent_for_msec
+            print(
+                f"To account for wireless delay (<= {touch_sent_for_msec} msec), {max_msec_before_closing_action=}"
+            )
+        else:
+            print(f"Either hard wired or else {touch_sent_for_msec=} <0")
+            max_msec_before_closing_action = lockout_msec
+
         while True:
             now_msec = (time.monotonic_ns() - t0_nsec) / 1e6
             # check first if we had one or more valid touches, and the time has expired.
