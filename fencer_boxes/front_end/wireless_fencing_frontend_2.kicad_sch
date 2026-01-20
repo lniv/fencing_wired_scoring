@@ -1662,11 +1662,12 @@
 	)
 	(text "8 pin header assignments\n\n1 : NC\n2 : ground\n3 : 3.3V\n4 : tip sense line\n5 : NC\n6 : tip pullup line\n7 : lame drive\n8 : lame sense"
 		(exclude_from_sim no)
-		(at 62.484 94.488 0)
+		(at 53.34 82.296 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
+			(justify left)
 		)
 		(uuid "79895161-97ac-42f4-94ab-b2023cc69a88")
 	)
