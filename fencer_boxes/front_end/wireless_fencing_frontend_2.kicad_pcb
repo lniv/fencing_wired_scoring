@@ -109,24 +109,23 @@
 		(descr "Resistor SMD 0805 (2012 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "resistor")
 		(property "Reference" "R9"
-			(at 0 -1.65 0)
+			(at -0.9125 -1.75 0)
 			(layer "F.SilkS")
 			(uuid "c7647ec0-7ebd-4e57-8a0b-e365cc92c4ab")
 			(effects
 				(font
-					(size 1 1)
+					(size 1 0.8)
 					(thickness 0.15)
 				)
 			)
 		)
-		(property "Value" "20k"
-			(at 0 1.65 0)
+		(property "Value" "10k"
+			(at 1.0875 -1.75 0)
 			(layer "F.Fab")
-			(hide yes)
 			(uuid "913615d7-1898-4eb4-b0ca-22a0c86dcfda")
 			(effects
 				(font
-					(size 1 1)
+					(size 1 0.8)
 					(thickness 0.15)
 				)
 			)
@@ -168,7 +167,7 @@
 				(type solid)
 			)
 			(layer "F.SilkS")
-			(uuid "9f075805-35f2-49a3-990c-78be3c0f7a9e")
+			(uuid "11437c04-e907-4824-b964-7ec816b303d3")
 		)
 		(fp_line
 			(start -0.227064 -0.735)
@@ -178,7 +177,7 @@
 				(type solid)
 			)
 			(layer "F.SilkS")
-			(uuid "04b00a09-7b32-4050-93b4-20c2567c1518")
+			(uuid "8112cd22-742c-4e6b-8b1c-28d096b86348")
 		)
 		(fp_line
 			(start 1.68 0.95)
@@ -188,7 +187,7 @@
 				(type solid)
 			)
 			(layer "F.CrtYd")
-			(uuid "cccb6947-1b6b-4530-a66f-8fd88c6d26ed")
+			(uuid "5a39c515-36f0-4ba2-bf1e-e09398b2a723")
 		)
 		(fp_line
 			(start 1.68 -0.95)
@@ -198,7 +197,7 @@
 				(type solid)
 			)
 			(layer "F.CrtYd")
-			(uuid "3ad47d6d-7e3e-47d1-910d-6e893d9f8339")
+			(uuid "816a6a6e-e72d-41d0-bad9-44724aec1cb7")
 		)
 		(fp_line
 			(start -1.68 0.95)
@@ -208,7 +207,7 @@
 				(type solid)
 			)
 			(layer "F.CrtYd")
-			(uuid "e0b8602d-61d3-44b0-8afe-5f77ae7d9ecc")
+			(uuid "6ac116b4-f8cf-400c-a08d-a360bdc9cdaa")
 		)
 		(fp_line
 			(start -1.68 -0.95)
@@ -218,7 +217,7 @@
 				(type solid)
 			)
 			(layer "F.CrtYd")
-			(uuid "30faa27a-06e1-410a-95b5-33607f2895b9")
+			(uuid "756823ba-6087-469b-8d6e-39da756a9b98")
 		)
 		(fp_line
 			(start 1 0.625)
@@ -228,7 +227,7 @@
 				(type solid)
 			)
 			(layer "F.Fab")
-			(uuid "8abf0f7f-cec7-4613-aa5e-c9051b97eae7")
+			(uuid "e61b7fc4-03ad-4455-866e-c3b2bbdb51a7")
 		)
 		(fp_line
 			(start 1 -0.625)
@@ -238,7 +237,7 @@
 				(type solid)
 			)
 			(layer "F.Fab")
-			(uuid "d9ef1229-cb85-4183-a229-927552a4354a")
+			(uuid "e0c12318-0112-45be-98a9-8f5ffe30c856")
 		)
 		(fp_line
 			(start -1 0.625)
@@ -248,7 +247,7 @@
 				(type solid)
 			)
 			(layer "F.Fab")
-			(uuid "3b9c6bba-60a0-4e63-916a-7baffbed73ce")
+			(uuid "3393582c-3375-4749-898c-4fce095ab9e2")
 		)
 		(fp_line
 			(start -1 -0.625)
@@ -258,7 +257,7 @@
 				(type solid)
 			)
 			(layer "F.Fab")
-			(uuid "a46c7d90-70a7-42f2-a84f-c9e7d5574eba")
+			(uuid "d48affdd-a0a1-4385-80f0-5972da8b7b55")
 		)
 		(fp_text user "${REFERENCE}"
 			(at 0 0 0)
@@ -1624,13 +1623,13 @@
 				)
 			)
 		)
-		(property "Value" "6.8nF"
+		(property "Value" "0.33nF"
 			(at 0 1.68 0)
 			(layer "F.SilkS")
 			(uuid "a1bedca3-baec-41be-ba2d-969c2f86f002")
 			(effects
 				(font
-					(size 1 1)
+					(size 1 0.8)
 					(thickness 0.15)
 				)
 			)
