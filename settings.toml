@@ -37,7 +37,7 @@ min_touch_msec = 14
 # i'm ok with these being integers,
 left_Hz = 7000
 right_Hz = 8000
-min_valid_power = "5e10"
+min_valid_power = "1e10"
 dormant_after_hit_msec = 3000
 message_repeat_min_msec = 10
 message_repeat_max_msec = 50
