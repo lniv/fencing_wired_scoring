@@ -1,15 +1,7 @@
 """
 Code for a wireless fencer box.
 
-need to be able to detect a switch closing, and whether we sense an AC signal (on the opponents lame), sending the results to a server.
-
-network note: this relies on having a secrets.toml file in the root folder, which includes
-netork credentials amongst other items. The included file needs to be amended.
-
-CIRCUITPY_WIFI_SSID = "your_ssid"
-CIRCUITPY_WIFI_PASSWORD = "your_ssid_passwd"
-
-Also, we need the adafruit request library.
+need to be able to detect a switch closing, and whether we sense an AC signal (on the opponents lame), sending the results to a server/display.
 
 Since we need the settings.toml for wireless, we'll use it as a general storage.
 it will have multiple sections:
@@ -50,6 +42,7 @@ for name in (
     "display_port",
     "fencer",
     "sampling_rate_Hz",
+    "min_touch_msec",
     "sampling_time_msec",
     "left_Hz",
     "right_Hz",
@@ -270,15 +263,21 @@ def is_tip_depressed():
     return touch
 
 
+min_touch_nsec = settings["min_touch_msec"] * 1e6
 touch_i = 0
 while True:
     t_now_ns = time.monotonic_ns()
     if is_tip_depressed():
         with analogbufio.BufferedIn(board.GP26, sample_rate=sampling_rate) as adcbuf:
             adcbuf.readinto(adc_read_buffer)
+        t_pre = time.monotonic_ns()
+        # timed it - took ~ 3 msec for a 500 long buffer. not too awful.
         pow = goertzel_algorithm(
             adc_read_buffer, sample_rate=sampling_rate, target_frequency=target_freq
         )
+        # wait for min time to pass before checking (debounce)
+        while time.monotonic_ns() - t_now_ns < min_touch_nsec:
+            pass
         if not is_tip_depressed():
             print("failed to find tip still pressed after checking validity, no touch.")
             continue
