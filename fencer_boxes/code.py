@@ -290,7 +290,7 @@ while True:
         # print(f"{time_since_press_sec=:0.4f} {dormant_after_hit_sec=:0.2f}")
         sleep_t = dormant_after_hit_sec - time_since_press_sec
         if sleep_t <= 0:
-            print(f"Something is odd - {sleep_t=} <= 0; skipping sleep.")
+            print(f"{sleep_t=} <= 0; skipping sleep.")
         else:
             print(f"sleeping for {sleep_t:0.3f} sec")
             time.sleep(sleep_t)

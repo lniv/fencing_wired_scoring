@@ -23,7 +23,7 @@ sampling_rate_Hz = 50000
 
 buzzer_time_msec = 1000
 # amount of time display remains lit
-delay_before_display_reset_msec = 3000
+delay_before_display_reset_msec = 2000
 
 # reference :
 # FIE material rules : https://static.fie.org/uploads/34/172612-book%20m%20ang.pdf
@@ -44,6 +44,6 @@ min_touch_msec = 14
 left_Hz = 7000
 right_Hz = 8000
 min_valid_power = "1e10"
-dormant_after_hit_msec = 3000
+dormant_after_hit_msec = 50  # had it long initially, in practice setting to near zero.
 message_repeat_min_msec = 10
 message_repeat_max_msec = 50
