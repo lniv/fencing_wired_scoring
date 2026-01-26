@@ -481,6 +481,15 @@ class WirelessFencingStatus(FencingStaus):
                 if action == "touched":
                     action_i = int(action_i)
                     # check that we can't accidentally invalidate something when we reset the fencer boxes?
+                    # FIXME : bug here (not an issue before due to long lock out time)
+                    # the box is sending a next hit from its perspective, but we're still in the same cycle!
+                    # if we announced, don't process!
+                    if self.status[side]["announced"]:
+                        # the fencer box may be alive (and send a "new" hit) before the action ends.
+                        # Can be avoided by having a box side timout that's longer than the display's,
+                        # but that's annoying in practice, or by communicating bidirectionally,
+                        # which i'd like to avoid for now - harder to debug.
+                        return
                     if self.last_action_i[side] != action_i:
                         print(
                             f"we got {side=}, {action=}, {valid=}, {repeat_i=} (at {t_sent})"
