@@ -25,6 +25,7 @@ print("en garde")
 # make it weapon specifc, so that we'll need some additional hardware (switch, an i2c controlled matrix etc)
 # to accommodate that.
 
+
 from os import getenv
 import time
 import board
@@ -46,6 +47,7 @@ required_keys = (
     "min_touch_msec",
     "buzzer_time_msec",
     "delay_before_display_reset_msec",
+    "update_images_when_announcing",
 )
 for key in required_keys:
     settings[key] = getenv(key)
@@ -379,7 +381,7 @@ class FencingStaus:
             max_msec_before_closing_action = lockout_msec
 
         while True:
-            now_msec = (time.monotonic_ns() - t0_nsec) / 1e6
+            now_msec = time.monotonic_ns() / 1e6
             # check first if we had one or more valid touches, and the time has expired.
             if (
                 self.status["right"]["announced"]
@@ -396,7 +398,7 @@ class FencingStaus:
                 continue
             self._check_for_hit(now_msec)
             # the cycle where we end the action does not get measured, which is as it should be.
-            last_cycle_msec = (time.monotonic_ns() - t0_nsec) / 1e6 - now_msec
+            last_cycle_msec = time.monotonic_ns() / 1e6 - now_msec
             if last_cycle_msec > self.worst_cycle_msec:
                 self.worst_cycle_msec = last_cycle_msec
 
@@ -429,18 +431,22 @@ class WirelessFencingStatus(FencingStaus):
         )
         self.last_action_i = {"right": 0, "left": 0}
 
-    def end_action(self):
-        super().end_action()
-        # i want to clear any messages in the queue.
+    def _dump_packets(self, timeout_ns):
+        """
+        Drop any packets in the sockets.
+        Args:
+            timeout_ns: loop till this (delta) time and drop any packets.
+        """
         buffer = bytearray(1024)
         t0 = time.monotonic_ns()
         # hard limit to 0.1 sec
-        while time.monotonic_ns() - t0 < 1e8:
+        while time.monotonic_ns() - t0 < timeout_ns:
             try:
                 num_bytes = self.sock.recv_into(buffer)
+                # i may comment this out once stable.
                 if num_bytes > 0:
                     print(
-                        f"{time.monotonic_ns()/1e9:0.2f} post action, found {num_bytes} in sockets."
+                        f"{time.monotonic_ns()/1e9:0.2f} post action, found {num_bytes} in sockets; {buffer[:num_bytes]=}"
                     )
                 else:
                     break
@@ -450,6 +456,11 @@ class WirelessFencingStatus(FencingStaus):
                 else:
                     # if we have a timeout, we're done.
                     break
+
+    def end_action(self):
+        super().end_action()
+        # i want to clear any messages in the queue; spent 1/10 sec.
+        self._dump_packets(timeout_ns=1e8)
         print("socket clear, reset finished\n\n")
 
     def _check_for_hit(self, now_msec):
@@ -494,6 +505,13 @@ class WirelessFencingStatus(FencingStaus):
                         self.status[side]["touch_started_msec"] = time_of_hit
                         self.status[side]["valid"] = True if valid == "True" else False
                         self.announce(side)
+                        post_announce_t_msec = time.monotonic_ns() / 1e6
+                        print(
+                            f"processing hit took {post_announce_t_msec - now_msec} msec"
+                        )
+                        # clear messages here - otherwise we assign them a later time than they should.
+                        # decided on 1e4 nsec = 10 usec as a non zero time that's infinitesimal
+                        self._dump_packets(1e4)
                 else:
                     print(
                         f"Got {data=} from {remote_address}, not a touch, no special handling."
@@ -507,7 +525,11 @@ class WirelessFencingStatus(FencingStaus):
 
 # actually execute stuff...
 if using_wireless:
-    fencer_status = WirelessFencingStatus()
+    fencer_status = WirelessFencingStatus(
+        update_images_when_announcing=settings["update_images_when_announcing"]
+    )
 else:
-    fencer_status = FencingStaus()
+    fencer_status = FencingStaus(
+        update_images_when_announcing=settings["update_images_when_announcing"]
+    )
 fencer_status.run_forever()

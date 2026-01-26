@@ -16,9 +16,16 @@ HAVE_EXTERNAL_PULLUPS = 1
 # for (wireless) fencer boxes (the display will ignore this.)
 fencer = "right"  # or left, but nothing else - and we'll complain!
 
+# for wired setup this is more of a problem and 0 might be better.
+# (mostly because i found no way to compensate for the added time of adding the images immediately)
+# due to circuitpython toml subset, no booleans, so any non zero value = true.
+update_images_when_announcing = 1
+
 # items below this line shouldn't be edited in general.
 # NOTE: you can't use floats directly due to the subset of toml implemented by circuitpython.
 # so float values are given as strings and converted in code, and i've tried to avoid it mostly.
+# it also can't do booleans, so true = any non zero value...
+
 sampling_rate_Hz = 50000
 
 buzzer_time_msec = 1000
