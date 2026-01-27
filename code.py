@@ -145,6 +145,7 @@ class FencingStaus:
         )
         print(f"Setting up, {update_images_when_announcing=}")
         self.update_images_when_announcing = update_images_when_announcing
+        self.making_noise = True
         self.reset_status()
         self.prep_display()
         self.display_logo()
@@ -187,7 +188,8 @@ class FencingStaus:
             self.root_group.pop()
 
     def play_buzzer(self):
-        buzzer.duty_cycle = 65535 // 2
+        if self.making_noise:
+            buzzer.duty_cycle = 65535 // 2
         time.sleep(self.buzzer_time_sec)  # may want to make this configurable?
         buzzer.duty_cycle = 0
 
@@ -279,8 +281,9 @@ class FencingStaus:
         self.status[side]["announced"] = True
         # time the action - i want to know how long this is actually taking!
         announce_start_t = time.monotonic_ns()
-        # now i want to start the buzzer.
-        buzzer.duty_cycle = 65535 // 2
+        if self.making_noise:
+            # now i want to start the buzzer.
+            buzzer.duty_cycle = 65535 // 2
         # finding out that it takes a large amount of time to display the image - about 20 msec.
         # this dominates cycle time.
         # will profile / look for other options.
@@ -430,6 +433,25 @@ class WirelessFencingStatus(FencingStaus):
             f"Listening for UDP packets at ({settings['display_ip']}:{settings['display_port']})"
         )
         self.last_action_i = {"right": 0, "left": 0}
+
+    def _update_noise_making_status(self):
+        # a bit of a kludge, but i want a quick way to shut this up.
+        # if we're shorting the right A and C lines, shut up.
+        right_A.pull = Pull.UP
+        right_C.switch_to_output(value=False)
+        A_value = right_A.value
+        if not A_value and self.making_noise:
+            print("A and C shorted ; inhibiting noise.")
+            self.making_noise = False
+        elif A_value and not self.making_noise:
+            print("A and C open : noisy.")
+            self.making_noise = True
+        right_C.switch_to_input(pull=None)
+        right_A.pull = None
+
+    def reset_status(self):
+        super().reset_status()
+        self._update_noise_making_status()
 
     def _dump_packets(self, timeout_ns):
         """
