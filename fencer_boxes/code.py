@@ -239,6 +239,7 @@ sampling_time_sec = settings["sampling_time_msec"] * 1e-3
 sampling_rate = settings["sampling_rate_Hz"]
 array_length = int(sampling_time_sec * sampling_rate)
 print(f"sampling for {sampling_time_sec=}, {sampling_rate=}, N={array_length}")
+print(f"vaid touch requires {settings['min_valid_power']=}")
 adc_read_buffer = array.array("H", [0x0000] * array_length)
 
 t0_ns = time.monotonic_ns()
@@ -296,7 +297,7 @@ while True:
             time.sleep(sleep_t)
         post_announce_t_ns = time.monotonic_ns()
         msg = f"{we_are},Sent hit - slept - back in business,{touch_i},False"
-        print(post_announce_t_ns, msg)
+        print(post_announce_t_ns, msg + "\n\n")
         send_msg(msg, post_announce_t_ns)
     else:
         pass
