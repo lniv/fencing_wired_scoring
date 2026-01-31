@@ -50,7 +50,7 @@ min_touch_msec = 14
 # i.e. they are the ones the other side is checking for.
 left_Hz = 7000
 right_Hz = 8000
-min_valid_power = "1e10"
+min_valid_power = "8e10"
 dormant_after_hit_msec = 50  # had it long initially, in practice setting to near zero.
 message_repeat_min_msec = 5
 message_repeat_max_msec = 20
