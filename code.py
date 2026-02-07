@@ -41,7 +41,8 @@ import wifi
 
 # using one of the built in buttons to allow overriding mode.
 # if using anything other than a matrixportal-S3, you may want to adjust.
-mode_select_button = DigitalInOut(board.BUTTON_DOWN)
+mode_select_pin = board.BUTTON_DOWN
+mode_select_button = DigitalInOut(mode_select_pin)
 mode_select_button.switch_to_input(pull=Pull.UP)
 
 settings = {}
@@ -169,6 +170,18 @@ class FencingStaus:
         self.display_image_sequence()
         self.play_buzzer()
 
+    def _update_noise_making_status(self):
+        """
+        we'll use the mode select button to change audio status.
+        If it's pressed, we'll go silent (on next hit)
+        """
+        if not mode_select_button.value and self.making_noise:
+            print(f"{mode_select_pin} pressed; inhibiting noise.")
+            self.making_noise = False
+        elif mode_select_button.value and not self.making_noise:
+            print(f"{mode_select_pin} is not pressed: noisy.")
+            self.making_noise = True
+
     def prep_display(self):
         displayio.release_displays()
         self.screen_size = (64, 32)
@@ -285,6 +298,7 @@ class FencingStaus:
             "right": {"touch_started_msec": None, "valid": False, "announced": False},
             "left": {"touch_started_msec": None, "valid": False, "announced": False},
         }
+        self._update_noise_making_status()
 
     def announce(self, side):
         """
@@ -452,25 +466,6 @@ class WirelessFencingStatus(FencingStaus):
             f"Listening for UDP packets at ({settings['display_ip']}:{settings['display_port']})"
         )
         self.last_action_i = {"right": 0, "left": 0}
-
-    def _update_noise_making_status(self):
-        # a bit of a kludge, but i want a quick way to shut this up.
-        # if we're shorting the right A and C lines, shut up.
-        right_A.pull = Pull.UP
-        right_C.switch_to_output(value=False)
-        A_value = right_A.value
-        if not A_value and self.making_noise:
-            print("A and C shorted ; inhibiting noise.")
-            self.making_noise = False
-        elif A_value and not self.making_noise:
-            print("A and C open : noisy.")
-            self.making_noise = True
-        right_C.switch_to_input(pull=None)
-        right_A.pull = None
-
-    def reset_status(self):
-        super().reset_status()
-        self._update_noise_making_status()
 
     def _dump_packets(self, timeout_ns):
         """
