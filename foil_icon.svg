@@ -7,7 +7,7 @@
    viewBox="0 0 16.933333 8.4666666"
    version="1.1"
    id="svg1"
-   inkscape:version="1.4.2 (2aeb623e1d, 2025-05-12)"
+   inkscape:version="1.4.3 (fcd0343856, 2026-01-01)"
    sodipodi:docname="foil_icon.svg"
    inkscape:export-filename="foil_icon.png"
    inkscape:export-xdpi="96"
@@ -26,15 +26,16 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="21.936364"
-     inkscape:cx="32.047244"
-     inkscape:cy="12.741401"
+     inkscape:zoom="10.968182"
+     inkscape:cx="67.148776"
+     inkscape:cy="11.806879"
      inkscape:window-width="2880"
      inkscape:window-height="1863"
      inkscape:window-x="0"
      inkscape:window-y="33"
      inkscape:window-maximized="1"
-     inkscape:current-layer="layer1" />
+     inkscape:current-layer="layer1"
+     showgrid="false" />
   <defs
      id="defs1" />
   <g
@@ -64,5 +65,17 @@
            x="3.2038798"
            y="0.7795195">FOIL</tspan></text>
     </g>
+    <text
+       xml:space="preserve"
+       style="font-size:6.35px;font-family:'DM Mono';-inkscape-font-specification:'DM Mono';writing-mode:lr-tb;direction:ltr;fill:#ff0000;stroke:#ffffff;stroke-width:0"
+       x="0.35283938"
+       y="7.6614075"
+       id="text1"
+       transform="matrix(0.80939729,-0.26920364,0.0569782,1.2165364,0,0)"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         style="font-size:6.35px;fill:#ff0000;stroke-width:0"
+         x="0.35283938"
+         y="7.6614075">~wire</tspan></text>
   </g>
 </svg>

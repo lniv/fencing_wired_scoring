@@ -149,6 +149,9 @@ class FencingStaus:
             only at the end of the action.
     """
 
+    # image to be shown at start.
+    logo_path = "/foil_icon.bmp"
+
     def __init__(self, update_images_when_announcing=False):
         # length of time to play buzzer for end of action.
         # (but buzzer will sound earlier; total time will be first touch to end of action, plus this.)
@@ -232,13 +235,13 @@ class FencingStaus:
             f"Adding {filename}, {dt_bitmap=:0.1f}, {dt_tile=:0.1f}, {dt_append=:0.1f}, {dt_total=:0.1f} msec"
         )
 
-    def display_logo(self, time_sec=0.5):
+    def display_logo(self, time_sec=1.0):
         """
         flash the class logo for a given amount of time, then erase the screen
         """
         time_nsec = time_sec * 1e9
         self.erase_display()
-        self._add_image("/foil_icon.bmp", 0, 0)
+        self._add_image(self.logo_path, 0, 0)
         tic_ns = time.monotonic_ns()
         while time.monotonic_ns() - tic_ns <= time_nsec:
             pass
@@ -425,6 +428,8 @@ class WirelessFencingStatus(FencingStaus):
     Detect hits by receiving messages over wifi, rather than wires.
     welcome to the future, i hope.
     """
+
+    logo_path = "/foil_wireless_icon.bmp"
 
     def __init__(self, update_images_when_announcing=False):
         super().__init__(update_images_when_announcing)
