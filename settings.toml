@@ -13,6 +13,10 @@ display_port = 5000
 # no effect for wireless setups.
 HAVE_EXTERNAL_PULLUPS = 1
 
+# i.e. whether we make noise by default.
+# not that overriding the wireless mode at start will flip this, unless superhuman reflexes.
+default_audio_status = 1
+
 # for (wireless) fencer boxes (the display will ignore this.)
 fencer = "right"  # or left, but nothing else - and we'll complain!
 

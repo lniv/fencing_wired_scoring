@@ -53,6 +53,7 @@ required_keys = (
     "buzzer_time_msec",
     "delay_before_display_reset_msec",
     "update_images_when_announcing",
+    "default_audio_status",
 )
 for key in required_keys:
     settings[key] = getenv(key)
@@ -163,7 +164,8 @@ class FencingStaus:
         )
         print(f"Setting up, {update_images_when_announcing=}")
         self.update_images_when_announcing = update_images_when_announcing
-        self.making_noise = True
+        # the toml file is integer, for prints etc i prefer a boolean.
+        self.making_noise = True if settings["default_audio_status"] else False
         self.reset_status()
         self.prep_display()
         self.display_logo()
@@ -173,14 +175,13 @@ class FencingStaus:
     def _update_noise_making_status(self):
         """
         we'll use the mode select button to change audio status.
-        If it's pressed, we'll go silent (on next hit)
+        Holding it down while a tip is pressed will toggle the status.
         """
-        if not mode_select_button.value and self.making_noise:
-            print(f"{mode_select_pin} pressed; inhibiting noise.")
-            self.making_noise = False
-        elif mode_select_button.value and not self.making_noise:
-            print(f"{mode_select_pin} is not pressed: noisy.")
-            self.making_noise = True
+        # i only want to announce this if we're changing state, of course.
+        button_pressed = not mode_select_button.value
+        if button_pressed:
+            self.making_noise = not self.making_noise
+            print(f"{mode_select_pin} pressed; now {self.making_noise=}.")
 
     def prep_display(self):
         displayio.release_displays()
