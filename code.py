@@ -39,6 +39,10 @@ import framebufferio
 import socketpool
 import wifi
 
+# using one of the built in buttons to allow overriding mode.
+# if using anything other than a matrixportal-S3, you may want to adjust.
+mode_select_button = DigitalInOut(board.BUTTON_DOWN)
+mode_select_button.switch_to_input(pull=Pull.UP)
 
 settings = {}
 # we have a few keys we must have defined.
@@ -71,12 +75,22 @@ for name in wireless_minimal_keys:
     if settings[name] is None:
         print(f"{name=} not found in settings.toml ; no wireless")
 if set(settings.keys()).issuperset(wireless_minimal_keys):
-    using_wireless = True
-    touch_sent_for_msec = settings["send_touch_for_msec"]
+    print("settings.toml compatible with wireless operation.")
+    # allow overriding and going to wired mode if a button is held while initializing.
+    if not mode_select_button.value:
+        print("HOWEVER, overiding wireless valid config by button.")
+        using_wireless = False
+    else:
+        using_wireless = True
 else:
     using_wireless = False
+
+if using_wireless:
+    touch_sent_for_msec = settings["send_touch_for_msec"]
+else:
     touch_sent_for_msec = 0
-print(f"Based on keys existence in settings.toml, {using_wireless=}")
+
+print(f"{using_wireless=}")
 print(f"Using {lockout_msec=}, {min_touch_msec=} and {touch_sent_for_msec=}")
 
 
