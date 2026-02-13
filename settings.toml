@@ -30,7 +30,7 @@ update_images_when_announcing = 1
 # so float values are given as strings and converted in code, and i've tried to avoid it mostly.
 # it also can't do booleans, so true = any non zero value...
 
-sampling_rate_Hz = 50000
+sampling_rate_Hz = 80000
 
 buzzer_time_msec = 1000
 # amount of time display remains lit
@@ -46,7 +46,7 @@ send_touch_for_msec = 60
 # timing margin to allow processing to finish before min time, then busy wait and check
 # at the end of the min_touch window.
 # since we detect touch - sample - process - check if we're still touching.
-sampling_time_msec = 10
+sampling_time_msec = 5
 min_touch_msec = 14
 
 # i'm ok with these being integers,
@@ -54,7 +54,7 @@ min_touch_msec = 14
 # i.e. they are the ones the other side is checking for.
 left_Hz = 7000
 right_Hz = 8000
-min_valid_power = "1.5e10"
-dormant_after_hit_msec = 50  # had it long initially, in practice setting to near zero.
+min_valid_power = "2.5e9"
+dormant_after_hit_msec = 500  # can be much shorter, but find it a bit annoying in practice.
 message_repeat_min_msec = 5
 message_repeat_max_msec = 20

@@ -287,7 +287,7 @@ while True:
         # send, willing to repeat for some amount of time.
         send_msg(msg, t_now_ns, send_touch_for_ns)
         time_since_press_sec = (time.monotonic_ns() - t_now_ns) / 1e9
-        # print(t_now_ns, time_since_press_sec, msg + f"; {pow=}")
+        print(t_now_ns, time_since_press_sec, msg + f"; {pow=}")
         # print(f"{time_since_press_sec=:0.4f} {dormant_after_hit_sec=:0.2f}")
         sleep_t = dormant_after_hit_sec - time_since_press_sec
         if sleep_t <= 0:
