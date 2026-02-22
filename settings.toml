@@ -40,7 +40,8 @@ delay_before_display_reset_msec = 2000
 # FIE material rules : https://static.fie.org/uploads/34/172612-book%20m%20ang.pdf
 lockout_msec = 300
 send_touch_for_msec = 60
-# techincally 14+-1 msec.
+detection_to_sampling_msec = 5
+# technically 14+-1 msec.
 # Allowing for sampling_time_msec != min_touch_msec
 # used by the fencer box to handle processing time; the idea is that we sample with enough
 # timing margin to allow processing to finish before min time, then busy wait and check
@@ -54,7 +55,7 @@ min_touch_msec = 14
 # i.e. they are the ones the other side is checking for.
 left_Hz = 7000
 right_Hz = 8000
-min_valid_power = "2.5e9"
+min_valid_power = "8e8"
 dormant_after_hit_msec = 500  # can be much shorter, but find it a bit annoying in practice.
 message_repeat_min_msec = 5
 message_repeat_max_msec = 20

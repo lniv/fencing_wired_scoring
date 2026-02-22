@@ -13,6 +13,12 @@ while i could split the settings to multiple files, i decided i preferred a sing
 
 i'm intentionally keeping the code simple and linear - i could define classes and attributes,
 but for this it makes sense to just have globals; there's really not much to it (on the fencer side)
+
+NOTE: this was used originally with a pico2W i.e. a RP2350:
+this required working around errata E9 - the pin latches up without an external
+pulldown smaller than 8.2K !!
+since the series protection resistor (which ground the pin through the tip) is 20k,
+i chose to ground the pin in firmware instead.
 """
 
 import board
@@ -27,12 +33,14 @@ import random
 import wifi
 import socketpool
 from os import getenv
+from ulab import numpy as np
+from ulab.utils import from_uint16_buffer
 
 
 # standardize on using monotonic_ns as integer, and have times in millisec.
 
 print("Reading from settings.toml")
-# before we do anything else, lets see that we have a sane defintioins file.
+# before we do anything else, lets see that we have a sane definitions file.
 # i could set loops etc here, but keeping names explicit makes the IDE's life easier.
 settings = {}
 for name in (
@@ -43,6 +51,7 @@ for name in (
     "fencer",
     "sampling_rate_Hz",
     "min_touch_msec",
+    "detection_to_sampling_msec",
     "sampling_time_msec",
     "left_Hz",
     "right_Hz",
@@ -100,11 +109,13 @@ Lame_A_pin = board.GP13
 # we have a resistor connected between the jack and each
 # the pull up must be much larger than the protection resistor,
 # since that's part of the line going to ground when the tip switch is closed.
-# i.e. it won't "allow" it to be pulled to ground othewise.
+# i.e. it won't "allow" it to be pulled to ground otherwise.
 tip_B_pull_up_pin = DigitalInOut(board.GP10)  # 100kOhm
 tip_B_sense_pin = DigitalInOut(board.GP9)  # 20 kOhm
 # set both to high Z to begin.
-tip_B_pull_up_pin.switch_to_input(pull=None)
+# actually, i'm going to just have the pull up active
+# (i could probably have omitted it and used the built in, but prefer more control.)
+tip_B_pull_up_pin.switch_to_output(value=True)
 tip_B_sense_pin.switch_to_input(pull=None)
 
 
@@ -235,9 +246,18 @@ send_msg(f"{we_are},Just woke up,0,None.", time.monotonic_ns())
 
 ############## end network stuff
 # future / TODO: heartbeat to display / server, get time sync from server?
+detection_to_sampling_sec = settings["detection_to_sampling_msec"] * 1e-3
 sampling_time_sec = settings["sampling_time_msec"] * 1e-3
 sampling_rate = settings["sampling_rate_Hz"]
 array_length = int(sampling_time_sec * sampling_rate)
+
+# i'm going to run a median filter on the data, and do a linear fit subtraction.
+median_half_span = 2
+data_post_median_filt_indices = list(
+    range(median_half_span, array_length - median_half_span)
+)
+median_filtered_length = array_length - 2 * median_half_span
+t_vec = np.linspace(0, median_filtered_length / sampling_rate, median_filtered_length)
 print(f"sampling for {sampling_time_sec=}, {sampling_rate=}, N={array_length}")
 print(f"vaid touch requires {settings['min_valid_power']=}")
 adc_read_buffer = array.array("H", [0x0000] * array_length)
@@ -248,57 +268,98 @@ print(t0_ns, ready_msg)
 send_msg(ready_msg, t0_ns, 0)
 
 
-def is_tip_depressed():
+def reset_tip_state(ground_sec=0.001, delay_after_sec=0, repeats=1):
     """
-    Returns:
-        True if tip is found to be depressed/touching (circuit open).
+    I'm getting repeat phantom touches, which i suspect are the rp2350 bug.
+    the normal check does this momentarily, but we can afford to wait much longer after a touch
+    (whether is_tip_depressed should as well, maybe)
+    TODO: i should make this dependent on whether the board is an rp2350.
     """
-    tip_B_pull_up_pin.switch_to_output(value=True)
-    touch = tip_B_sense_pin.value  # foil : circuit opens upon touch.
-    tip_B_pull_up_pin.switch_to_input(pull=None)
     # work around for RP2350 errata E9 - the pin latches up without an external
     # pulldown smaller than 8.2K !!
     # since pulling it down to ground changes our protection, i'd rather do this.
-    tip_B_sense_pin.switch_to_output(value=False)
-    tip_B_sense_pin.switch_to_input(pull=None)
-    return touch
+    for _i in range(repeats):
+        tip_B_sense_pin.switch_to_output(value=False)
+        if ground_sec > 0:
+            time.sleep(ground_sec)
+        tip_B_sense_pin.switch_to_input(pull=None)
+        if delay_after_sec > 0:
+            time.sleep(delay_after_sec)
+
+
+def is_tip_depressed(ground_sense_sec=0.003):
+    """
+    foil specific ; if we branch in the future, we'll define this based on weapon.
+    NOTE: i've moved out any workaround for RP2350 latchup out of this.
+    Args:
+        ground_sense_sec: if positive, sleep with tip pulled down for this long [0.003]
+    Returns:
+        True if tip is found to be depressed/touching (circuit open).
+    """
+    return tip_B_sense_pin.value  # foil : circuit opens upon touch.
 
 
 min_touch_nsec = settings["min_touch_msec"] * 1e6
-touch_i = 0
+touch_i = 1
 while True:
-    t_now_ns = time.monotonic_ns()
-    if is_tip_depressed():
-        with analogbufio.BufferedIn(board.GP26, sample_rate=sampling_rate) as adcbuf:
-            adcbuf.readinto(adc_read_buffer)
-        t_pre = time.monotonic_ns()
-        # timed it - took ~ 3 msec for a 500 long buffer. not too awful.
-        pow = goertzel_algorithm(
-            adc_read_buffer, sample_rate=sampling_rate, target_frequency=target_freq
-        )
-        # wait for min time to pass before checking (debounce)
-        while time.monotonic_ns() - t_now_ns < min_touch_nsec:
-            pass
-        if not is_tip_depressed():
-            print("failed to find tip still pressed after checking validity, no touch.")
-            continue
-        touch_i += 1
-        msg = f"{we_are},touched,{touch_i},{pow >= settings['min_valid_power']}"
-        # send, willing to repeat for some amount of time.
-        send_msg(msg, t_now_ns, send_touch_for_ns)
-        time_since_press_sec = (time.monotonic_ns() - t_now_ns) / 1e9
-        print(t_now_ns, time_since_press_sec, msg + f"; {pow=}")
-        # print(f"{time_since_press_sec=:0.4f} {dormant_after_hit_sec=:0.2f}")
-        sleep_t = dormant_after_hit_sec - time_since_press_sec
-        if sleep_t <= 0:
-            print(f"{sleep_t=} <= 0; skipping sleep.")
-        else:
-            print(f"sleeping for {sleep_t:0.3f} sec")
-            time.sleep(sleep_t)
-        post_announce_t_ns = time.monotonic_ns()
-        msg = f"{we_are},Sent hit - slept - back in business,{touch_i},False"
-        print(post_announce_t_ns, msg + "\n\n")
-        send_msg(msg, post_announce_t_ns)
-    else:
+    # this section till we evaluate the ADC buffer should be in a weapon dependent function.
+    print(f"Waiting before {touch_i=}")
+    # wait for touch, busy loop, doing nothing else to get maximal responsiveness.
+    while not is_tip_depressed():
         pass
-        # print(f"{touch_i=}, no touch")
+    t_now_ns = time.monotonic_ns()
+    # drop the pullup, let the input float, so we don't rail things now.
+    tip_B_pull_up_pin.switch_to_input(pull=None)
+    # wait some amount of time, then record vector (and a short one - it seemed best to wait more!)
+    time.sleep(detection_to_sampling_sec)
+    # now record.
+    with analogbufio.BufferedIn(board.GP26, sample_rate=sampling_rate) as adcbuf:
+        adcbuf.readinto(adc_read_buffer)
+    reset_tip_state(ground_sec=0.001, delay_after_sec=0, repeats=1)
+    # now reactivate the pull up line.
+    tip_B_pull_up_pin.switch_to_output(value=True)
+    # now wait till min touch time has passed.
+    while time.monotonic_ns() - t_now_ns < min_touch_nsec:
+        pass
+    # check if the tip is still pressed.
+    # (making it more foil specific for now, will need to refactor later for e.g. epee)
+    if not is_tip_depressed():
+        print("failed to find tip still pressed after checking validity, no touch.")
+        continue
+    # we have a valid touch, analyze data now.
+    t_analysis_start_ns = time.monotonic_ns()
+    data = from_uint16_buffer(
+        adc_read_buffer
+    )  # faster than np.array(adc_read_buffer) ?
+    # run a median filter on data, 5 long kernel
+    data = [
+        np.median(data[i - median_half_span : i + median_half_span])
+        for i in data_post_median_filt_indices
+    ]
+    p_data = np.polyfit(t_vec, data, 1)
+    data = data - np.polyval(p_data, t_vec)
+
+    # timed it - took ~ 3 msec for a 500 long buffer. not too awful.
+    pow = goertzel_algorithm(
+        data, sample_rate=sampling_rate, target_frequency=target_freq
+    )
+    t_analysis_end_ns = time.monotonic_ns()
+
+    msg = f"{we_are},touched,{touch_i},{pow >= settings['min_valid_power']}"
+    # send, willing to repeat for some amount of time.
+    send_msg(msg, t_now_ns, send_touch_for_ns)
+    time_since_press_sec = (time.monotonic_ns() - t_now_ns) / 1e9
+    print(t_now_ns, time_since_press_sec, msg + f"; {pow=}")
+    # print(f"{time_since_press_sec=:0.4f} {dormant_after_hit_sec=:0.2f}")
+    sleep_t = dormant_after_hit_sec - time_since_press_sec
+    if sleep_t <= 0:
+        print(f"{sleep_t=} <= 0; skipping sleep.")
+    else:
+        print(f"sleeping for {sleep_t:0.3f} sec")
+        repeats = int(sleep_t / 0.01)
+        reset_tip_state(ground_sec=0, delay_after_sec=0.01, repeats=repeats)
+    post_announce_t_ns = time.monotonic_ns()
+    msg = f"{we_are},Sent hit - slept - back in business,{touch_i},False"
+    print(post_announce_t_ns, msg + "\n\n")
+    send_msg(msg, post_announce_t_ns)
+    touch_i += 1
