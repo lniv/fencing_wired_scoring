@@ -53,9 +53,9 @@ min_touch_msec = 14
 # i'm ok with these being integers,
 # the left and right frequencies are those emitted (put on lame) by that side
 # i.e. they are the ones the other side is checking for.
-left_Hz = 7000
-right_Hz = 8000
-min_valid_power = "8e8"
+left_Hz = 13000
+right_Hz = 11000
+min_valid_power = "3e8"
 dormant_after_hit_msec = 500  # can be much shorter, but find it a bit annoying in practice.
 message_repeat_min_msec = 5
 message_repeat_max_msec = 20
