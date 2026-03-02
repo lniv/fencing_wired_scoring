@@ -100,7 +100,9 @@ print(
 
 print("settings.toml looks sane; proceeding.")
 
-print(f"{we_are=}, output at {out_freq:0.0f} Hz, looking for {target_freq:0.0f} Hz")
+print(
+    f"{we_are=}, output at {out_freq} Hz, looking for {target_freq} Hz, analyzing {base_freq} Hz as well"
+)
 
 # hardware / pin definitions and setup
 
@@ -129,21 +131,21 @@ print(f"Playing pwm at {out_freq} on {Lame_A_pin}")
 
 
 # pretty much as taken from a random google search,
-def goertzel_algorithm(samples, sample_rate, target_frequency):
+def goertzel_algorithm(samples, sample_rate, analysis_frequency):
     """
     Implements the Goertzel algorithm to find the power of a single frequency.
 
     Args:
         samples (list or np.array): The input signal (time domain samples).
         sample_rate (int): The sampling rate of the signal (Hz).
-        target_frequency (float): The frequency to detect (Hz).
+        analysis_frequency (float): The frequency to detect (Hz).
 
     Returns:
         float: The magnitude squared (power) of the target frequency.
     """
     N = len(samples)
     # Calculate the target frequency index 'k'
-    k = (N * target_frequency) / sample_rate
+    k = (N * analysis_frequency) / sample_rate
     # Calculate the coefficient 'w_real' (cosine) and 'w_imag' (sine)
     omega = 2.0 * math.pi * k / N
     cosine = math.cos(omega)
@@ -347,10 +349,10 @@ while True:
 
     # timed it - took ~ 3 msec for a 500 long buffer. not too awful.
     pow = goertzel_algorithm(
-        data, sample_rate=sampling_rate, target_frequency=target_freq
+        data, sample_rate=sampling_rate, analysis_frequency=target_freq
     )
     base_pow = goertzel_algorithm(
-        data, sample_rate=sampling_rate, target_frequency=base_freq
+        data, sample_rate=sampling_rate, analysis_frequency=base_freq
     )
     t_analysis_end_ns = time.monotonic_ns()
     print(f"Analysis too {t_analysis_end_ns - t_analysis_start_ns} nanosec")
