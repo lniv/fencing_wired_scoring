@@ -55,6 +55,7 @@ for name in (
     "sampling_time_msec",
     "left_Hz",
     "right_Hz",
+    "base_Hz",
     "min_valid_power",
     "send_touch_for_msec",
     "dormant_after_hit_msec",
@@ -66,6 +67,7 @@ for name in (
         raise RuntimeError(f"{name=} not found in settings.toml")
 
 we_are = settings["fencer"]
+base_freq = settings["base_Hz"]
 if we_are == "right":
     out_freq = settings["right_Hz"]
     target_freq = settings["left_Hz"]
@@ -241,7 +243,7 @@ pool = socketpool.SocketPool(wifi.radio)
 print("My MAC addr:", [hex(i) for i in wifi.radio.mac_address])
 #  prints IP address to REPL
 print(f"My IP address is {wifi.radio.ipv4_address}")
-send_msg(f"{we_are},Just woke up,0,None.", time.monotonic_ns())
+send_msg(f"{we_are},Just woke up,0,None,None", time.monotonic_ns())
 
 
 ############## end network stuff
@@ -263,7 +265,7 @@ print(f"vaid touch requires {settings['min_valid_power']=}")
 adc_read_buffer = array.array("H", [0x0000] * array_length)
 
 t0_ns = time.monotonic_ns()
-ready_msg = f"{we_are},now in business - looking for hits,0,None"
+ready_msg = f"{we_are},now in business - looking for hits,0,None,None"
 print(t0_ns, ready_msg)
 send_msg(ready_msg, t0_ns, 0)
 
@@ -319,6 +321,7 @@ while True:
     # now reactivate the pull up line.
     tip_B_pull_up_pin.switch_to_output(value=True)
     # now wait till min touch time has passed.
+    print(f"since touch {(time.monotonic_ns() - t_now_ns)/1e6} msec")
     while time.monotonic_ns() - t_now_ns < min_touch_nsec:
         pass
     # check if the tip is still pressed.
@@ -327,6 +330,9 @@ while True:
         print("failed to find tip still pressed after checking validity, no touch.")
         continue
     # we have a valid touch, analyze data now.
+    # calculate power at two frequencies
+    # if this doesn't work (and it didn't do great before), will have to do pseudo -random,
+    # or split the lame generation from the detection much harder (e.g. separate hardware)
     t_analysis_start_ns = time.monotonic_ns()
     data = from_uint16_buffer(
         adc_read_buffer
@@ -343,13 +349,21 @@ while True:
     pow = goertzel_algorithm(
         data, sample_rate=sampling_rate, target_frequency=target_freq
     )
+    base_pow = goertzel_algorithm(
+        data, sample_rate=sampling_rate, target_frequency=base_freq
+    )
     t_analysis_end_ns = time.monotonic_ns()
-
-    msg = f"{we_are},touched,{touch_i},{pow >= settings['min_valid_power']}"
+    print(f"Analysis too {t_analysis_end_ns - t_analysis_start_ns} nanosec")
+    # moving the validity call to the display / control side.
+    # i avoided it in the past to shorten cycle time, but timing it at 0.2 msec on an esp32-s3
+    # in circuitpython, even with float conversions, so acceptable for now and makes debugging
+    # easier.
+    msg = f"{we_are},touched,{touch_i},{pow},{base_pow}"
     # send, willing to repeat for some amount of time.
     send_msg(msg, t_now_ns, send_touch_for_ns)
     time_since_press_sec = (time.monotonic_ns() - t_now_ns) / 1e9
-    print(t_now_ns, time_since_press_sec, msg + f"; {pow=}")
+    # print(t_now_ns, time_since_press_sec, msg + f"; {pow=}")
+    print(t_now_ns, time_since_press_sec, msg)
     # print(f"{time_since_press_sec=:0.4f} {dormant_after_hit_sec=:0.2f}")
     sleep_t = dormant_after_hit_sec - time_since_press_sec
     if sleep_t <= 0:
@@ -359,7 +373,7 @@ while True:
         repeats = int(sleep_t / 0.01)
         reset_tip_state(ground_sec=0, delay_after_sec=0.01, repeats=repeats)
     post_announce_t_ns = time.monotonic_ns()
-    msg = f"{we_are},Sent hit - slept - back in business,{touch_i},False"
+    msg = f"{we_are},Sent hit - slept - back in business,{touch_i},None,None"
     print(post_announce_t_ns, msg + "\n\n")
     send_msg(msg, post_announce_t_ns)
     touch_i += 1

@@ -32,9 +32,9 @@ update_images_when_announcing = 1
 
 sampling_rate_Hz = 80000
 
-buzzer_time_msec = 1000
+buzzer_time_msec = 500
 # amount of time display remains lit
-delay_before_display_reset_msec = 2000
+delay_before_display_reset_msec = 1000
 
 # reference :
 # FIE material rules : https://static.fie.org/uploads/34/172612-book%20m%20ang.pdf
@@ -55,7 +55,11 @@ min_touch_msec = 14
 # i.e. they are the ones the other side is checking for.
 left_Hz = 13000
 right_Hz = 11000
-min_valid_power = "3e8"
+# frequency we can use to figure out base levels.
+base_Hz = 9000
+min_valid_power = "1e8"
+# ratio between target and base frequency powers.
+min_valid_power_ratio = 2
 dormant_after_hit_msec = 500  # can be much shorter, but find it a bit annoying in practice.
 message_repeat_min_msec = 5
 message_repeat_max_msec = 20

@@ -71,6 +71,8 @@ wireless_minimal_keys = (
     "display_ip",
     "display_port",
     "send_touch_for_msec",
+    "min_valid_power",
+    "min_valid_power_ratio",
 )
 for name in wireless_minimal_keys:
     settings[name] = getenv(name)
@@ -448,6 +450,11 @@ class WirelessFencingStatus(FencingStaus):
 
     def __init__(self, update_images_when_announcing=False):
         super().__init__(update_images_when_announcing)
+        self.min_valid_power = float(settings["min_valid_power"])
+        self.min_valid_power_ratio = float(settings["min_valid_power_ratio"])
+        print(
+            f"Valid touches require {self.min_valid_power=} and {self.min_valid_power_ratio=}"
+        )
         print("Creating access point...")
         wifi.radio.start_ap(
             ssid=settings["wifi_ssid"], password=settings["wifi_password"]
@@ -501,18 +508,22 @@ class WirelessFencingStatus(FencingStaus):
         print("socket clear, reset finished\n\n")
 
     def _check_for_hit(self, now_msec):
+        # NOTE: i'm going to ignore the time we entered (now_msec).
+        # it seems the dominant time is the receive, despite the short timeout.
         try:
+            # t_pre_buff_ns = time.monotonic_ns()
             buffer = bytearray(1024)
             # todo: time this (the buffer etc creation.), if i can.
             num_bytes, remote_address = self.sock.recvfrom_into(buffer)
+            recv_ns = time.monotonic_ns()
             if num_bytes > 0:
                 data = buffer[:num_bytes].decode(
                     "utf-8"
                 )  # Slice the buffer to the actual data length
                 # we get e.g.
-                # 3054491455081;1220707;1;right,Sent hit - slept - back in business,2,False
+                # 11509622741708;40710445;1;right,touched,74,804336.0,7.65303e+08
                 t_sent, dt_ns, repeat_i, msg = data.split(";")
-                side, action, action_i, valid = msg.split(",")
+                side, action, action_i, pow_s, base_pow_s = msg.split(",")
                 if not side in ("right", "left"):
                     raise ValueError(f"{msg} must start with right or left.")
                 if action == "touched":
@@ -523,20 +534,25 @@ class WirelessFencingStatus(FencingStaus):
                     # if we announced, don't process!
                     if self.status[side]["announced"]:
                         # the fencer box may be alive (and send a "new" hit) before the action ends.
-                        # Can be avoided by having a box side timout that's longer than the display's,
+                        # Can be avoided by having a box side timeout that's longer than the display's,
                         # but that's annoying in practice, or by communicating bidirectionally,
                         # which i'd like to avoid for now - harder to debug.
                         return
                     if self.last_action_i[side] != action_i:
-                        print(
-                            f"we got {side=}, {action=}, {valid=}, {repeat_i=} (at {t_sent})"
-                        )
+                        # now figure out if it's valid.
+                        # t0_ns = time.monotonic_ns()
+                        # print(
+                        #     f"we got {side=}, {action=}, {pow_s=}, {base_pow_s=}, {repeat_i=} (at {t_sent})"
+                        # )
+                        # t_print_ns = time.monotonic_ns()
                         # first, ensure we don't handle this one again.
-                        # (i could hange this, but the case where we get a later message
+                        # (i could change this, but the case where we get a later message
                         # with a better time seems far fetched.)
                         self.last_action_i[side] = action_i
-                        dt_msec = float(dt_ns) * 1e-6
-                        time_of_hit = now_msec - dt_msec
+                        # NOTE: using the time stamp at the end of the receive call
+                        # dt_msec = float(dt_ns) * 1e-6
+                        # time_of_hit = now_msec - dt_msec
+                        time_of_hit = (recv_ns - float(dt_ns)) * 1e-6
                         # if the other side announced, see if we're within the valid time!
                         other_side = "left" if side == "right" else "right"
                         if self.status[other_side]["touch_started_msec"] is not None:
@@ -549,14 +565,27 @@ class WirelessFencingStatus(FencingStaus):
                                 )
                                 return
                         self.status[side]["touch_started_msec"] = time_of_hit
-                        self.status[side]["valid"] = True if valid == "True" else False
-                        self.announce(side)
-                        post_announce_t_msec = time.monotonic_ns() / 1e6
-                        print(
-                            f"processing hit took {post_announce_t_msec - now_msec} msec"
+                        # t_pre_valid_check_ns = time.monotonic_ns()
+                        pow = float(pow_s)
+                        base_pow = float(base_pow_s)
+                        self.status[side]["valid"] = (
+                            pow >= self.min_valid_power
+                            and pow / base_pow > self.min_valid_power_ratio
                         )
-                        # clear messages here - otherwise we assign them a later time than they should.
-                        # decided on 1e4 nsec = 10 usec as a non zero time that's infinitesimal
+                        print(f"{pow=}, {base_pow=}, {(pow / base_pow)=:0.2f}")
+                        # t_post_valid_check_ns = time.monotonic_ns()
+                        self.announce(side)
+                        # post_announce_t_ns = time.monotonic_ns()
+                        # commenting this out, but it does seem i have ~ 130 msec worst case
+                        # between the start of the cycle and the end?, so shifted to using receive time.
+                        # print_s = f"\
+                        #     {(t_post_valid_check_ns - t_pre_valid_check_ns)=}\n\
+                        #     {(t_print_ns - t0_ns)=}\n\
+                        #     {(recv_ns - now_msec * 1e6)=}\n\
+                        #     {(t_pre_buff_ns - now_msec * 1e6)=}\n\
+                        #     {(recv_ns - t_pre_buff_ns)=}\n\
+                        #     {(post_announce_t_ns - now_msec * 1e6)=}"
+                        # print(print_s)
                         self._dump_packets(1e4)
                 else:
                     print(
