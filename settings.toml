@@ -40,14 +40,13 @@ delay_before_display_reset_msec = 1000
 # FIE material rules : https://static.fie.org/uploads/34/172612-book%20m%20ang.pdf
 lockout_msec = 300
 send_touch_for_msec = 60
-detection_to_sampling_msec = 5
+sampling_end_to_min_touch_msec = 1
 # technically 14+-1 msec.
 # Allowing for sampling_time_msec != min_touch_msec
-# used by the fencer box to handle processing time; the idea is that we sample with enough
-# timing margin to allow processing to finish before min time, then busy wait and check
-# at the end of the min_touch window.
+# used by the fencer box to handle processing time
 # since we detect touch - sample - process - check if we're still touching.
-sampling_time_msec = 5
+# we will optimize this to get a power of 2 adc reads.
+sampling_time_msec = 7
 min_touch_msec = 14
 
 # i'm ok with these being integers,
@@ -57,9 +56,9 @@ left_Hz = 13000
 right_Hz = 11000
 # frequency we can use to figure out base levels.
 base_Hz = 9000
-min_valid_power = "1e8"
+min_valid_power = "5e4"
 # ratio between target and base frequency powers.
-min_valid_power_ratio = 2
+min_valid_power_ratio = 0
 dormant_after_hit_msec = 500  # can be much shorter, but find it a bit annoying in practice.
 message_repeat_min_msec = 5
 message_repeat_max_msec = 20

@@ -34,7 +34,7 @@ import wifi
 import socketpool
 from os import getenv
 from ulab import numpy as np
-from ulab.utils import from_uint16_buffer
+from ulab.utils import from_uint16_buffer, spectrogram
 
 
 # standardize on using monotonic_ns as integer, and have times in millisec.
@@ -51,7 +51,7 @@ for name in (
     "fencer",
     "sampling_rate_Hz",
     "min_touch_msec",
-    "detection_to_sampling_msec",
+    "sampling_end_to_min_touch_msec",
     "sampling_time_msec",
     "left_Hz",
     "right_Hz",
@@ -67,13 +67,47 @@ for name in (
         raise RuntimeError(f"{name=} not found in settings.toml")
 
 we_are = settings["fencer"]
-base_freq = settings["base_Hz"]
+
+# i'm going to optimize things to get a power of 2 adc reads
+# since the ulab spectrogram requires it in any case.
+sampling_rate = settings["sampling_rate_Hz"]
+requested_sampling_time_sec = settings["sampling_time_msec"] * 1e-3
+pow2_vec = np.array([2**n for n in range(16)])  # enough to ensure cover.
+# NOTE: dropping the median filtering. if we decided to add it again,
+# we'll need to add the extra 2*half median here.
+array_length = int(
+    pow2_vec[np.argmin(abs(pow2_vec - sampling_rate * requested_sampling_time_sec))]
+)
+sampling_time_sec = array_length / sampling_rate
+print(
+    f"{requested_sampling_time_sec=}, selecting closest 2**n so that {sampling_time_sec=}, {array_length=}"
+)
+# now find the best match for frequencies.
+requested_base_freq = settings["base_Hz"]
+requested_right_freq = settings["right_Hz"]
+requested_left_freq = settings["left_Hz"]
+spectrogram_fs = np.linspace(0, sampling_rate / 2, int(array_length / 2 + 1))
+base_freq_i = np.argmin(abs(spectrogram_fs - requested_base_freq))
+right_freq_i = np.argmin(abs(spectrogram_fs - requested_right_freq))
+left_freq_i = np.argmin(abs(spectrogram_fs - requested_left_freq))
+# it's true that these won't be exact, but 0.5 Hz offset seems acceptable.
+base_freq = int(spectrogram_fs[base_freq_i])
+right_freq = int(spectrogram_fs[right_freq_i])
+left_freq = int(spectrogram_fs[left_freq_i])
+print(f"Optimizing to match spectrogram frequencies")
+print(f"{requested_base_freq=} changed to {base_freq=}, {base_freq_i=}")
+print(f"{requested_right_freq=} changed to {right_freq=}, {right_freq_i=}")
+print(f"{requested_left_freq=} changed to {left_freq=}, {left_freq_i=}")
+
+
 if we_are == "right":
-    out_freq = settings["right_Hz"]
-    target_freq = settings["left_Hz"]
+    out_freq = right_freq
+    target_freq = left_freq
+    target_freq_i = left_freq_i
 elif we_are == "left":
-    out_freq = settings["left_Hz"]
-    target_freq = settings["right_Hz"]
+    out_freq = left_freq
+    target_freq = right_freq
+    target_freq_i = right_freq_i
 else:
     raise RuntimeError(
         f"{settings['fencer']=} but we must be FENCER = RIGHT or FENCER = LEFT in settings.toml"
@@ -130,41 +164,74 @@ pwm_out = pwmio.PWMOut(
 print(f"Playing pwm at {out_freq} on {Lame_A_pin}")
 
 
-# pretty much as taken from a random google search,
-def goertzel_algorithm(samples, sample_rate, analysis_frequency):
-    """
-    Implements the Goertzel algorithm to find the power of a single frequency.
+# # pretty much as taken from a random google search,
+# def goertzel_algorithm(samples, sample_rate, analysis_frequency):
+#     """
+#     Implements the Goertzel algorithm to find the power of a single frequency.
 
-    Args:
-        samples (list or np.array): The input signal (time domain samples).
-        sample_rate (int): The sampling rate of the signal (Hz).
-        analysis_frequency (float): The frequency to detect (Hz).
+#     Args:
+#         samples (list or np.array): The input signal (time domain samples).
+#         sample_rate (int): The sampling rate of the signal (Hz).
+#         analysis_frequency (float): The frequency to detect (Hz).
 
-    Returns:
-        float: The magnitude squared (power) of the target frequency.
-    """
-    N = len(samples)
-    # Calculate the target frequency index 'k'
-    k = (N * analysis_frequency) / sample_rate
-    # Calculate the coefficient 'w_real' (cosine) and 'w_imag' (sine)
-    omega = 2.0 * math.pi * k / N
-    cosine = math.cos(omega)
-    coefficient = 2.0 * cosine
+#     Returns:
+#         float: The magnitude squared (power) of the target frequency.
+#     """
+#     N = len(samples)
+#     # Calculate the target frequency index 'k'
+#     k = (N * analysis_frequency) / sample_rate
+#     # Calculate the coefficient 'w_real' (cosine) and 'w_imag' (sine)
+#     omega = 2.0 * math.pi * k / N
+#     cosine = math.cos(omega)
+#     coefficient = 2.0 * cosine
 
-    # Initialize the two internal states (delays)
-    d1 = 0.0
-    d2 = 0.0
+#     # Initialize the two internal states (delays)
+#     d1 = 0.0
+#     d2 = 0.0
 
-    # Perform the main filtering loop
-    for sample in samples:
-        d0 = sample + coefficient * d1 - d2
-        d2 = d1
-        d1 = d0
+#     # Perform the main filtering loop
+#     for sample in samples:
+#         d0 = sample + coefficient * d1 - d2
+#         d2 = d1
+#         d1 = d0
 
-    # Calculate the power (magnitude squared)
-    # The result is equivalent to d1**2 + d2**2 - coefficient * d1 * d2
-    power = d2**2 + d1**2 - coefficient * d1 * d2
-    return power
+#     # Calculate the power (magnitude squared)
+#     # The result is equivalent to d1**2 + d2**2 - coefficient * d1 * d2
+#     power = d2**2 + d1**2 - coefficient * d1 * d2
+#     return power
+
+
+# def print_vec_horizontal(vec, divisions=32, span: float | None = 10000):
+#     """
+#     shows a trace of a vector, as the line separating stars from spaces
+
+#     Args:
+#         divisions: number of divisions we'll "plot" to
+#         span: if None, use data to calculate span, otherwise fixed span [10000]
+#     """
+#     # can't handle 0's, so we'll do this manually
+#     # vec = [np.log2(x)  if x >= 1 else 0 for x in vec]
+#     min_vec = np.min(vec)
+#     max_vec = np.max(vec)
+#     if span is None:
+#         if max_vec - min_vec < divisions:
+#             span = divisions
+#             print(f"{max_vec=}, {min_vec=} are too close, setting {span=}")
+#             # (i could just return here...)
+#         else:
+#             span = max_vec - min_vec
+#             print(f"{max_vec=}, {min_vec=} are sane, {span=}")
+#     else:
+#         print(f"as requested {span=}")
+#     print(f"{max_vec=}")
+#     for i in range(divisions - 1, -1, -1):
+#         # figure out which elements are above this height, and put an astrisk for them.
+#         line = "".join(
+#             # ["*" if not i+1 >= max_height * (x - min_vec) / span_vec >= i else " " for x in vec]
+#             ["*" if divisions * (x - min_vec) / span >= i else " " for x in vec]
+#         )
+#         print(line)
+#     print(f"{min_vec=}")
 
 
 # i could make it take e.g. a data class instance, but i'm worried about speed
@@ -250,20 +317,21 @@ send_msg(f"{we_are},Just woke up,0,None,None", time.monotonic_ns())
 
 ############## end network stuff
 # future / TODO: heartbeat to display / server, get time sync from server?
-detection_to_sampling_sec = settings["detection_to_sampling_msec"] * 1e-3
-sampling_time_sec = settings["sampling_time_msec"] * 1e-3
-sampling_rate = settings["sampling_rate_Hz"]
-array_length = int(sampling_time_sec * sampling_rate)
-
-# i'm going to run a median filter on the data, and do a linear fit subtraction.
-median_half_span = 2
-data_post_median_filt_indices = list(
-    range(median_half_span, array_length - median_half_span)
+detection_to_sampling_sec = (
+    settings["min_touch_msec"] - settings["sampling_end_to_min_touch_msec"]
+) * 1e-3 - sampling_time_sec
+print(
+    f"Will wait for {detection_to_sampling_sec} before sampling for {sampling_time_sec=}."
 )
-median_filtered_length = array_length - 2 * median_half_span
-t_vec = np.linspace(0, median_filtered_length / sampling_rate, median_filtered_length)
+
+# # i'm going to run a median filter on the data, and do a linear fit subtraction.
+# median_half_span = 2
+# data_post_median_filt_indices = list(
+#     range(median_half_span, array_length - median_half_span)
+# )
+# median_filtered_length = array_length - 2 * median_half_span
+# t_vec = np.linspace(0, median_filtered_length / sampling_rate, median_filtered_length)
 print(f"sampling for {sampling_time_sec=}, {sampling_rate=}, N={array_length}")
-print(f"vaid touch requires {settings['min_valid_power']=}")
 adc_read_buffer = array.array("H", [0x0000] * array_length)
 
 t0_ns = time.monotonic_ns()
@@ -315,7 +383,8 @@ while True:
     # drop the pullup, let the input float, so we don't rail things now.
     tip_B_pull_up_pin.switch_to_input(pull=None)
     # wait some amount of time, then record vector (and a short one - it seemed best to wait more!)
-    time.sleep(detection_to_sampling_sec)
+    if detection_to_sampling_sec > 0:
+        time.sleep(detection_to_sampling_sec)
     # now record.
     with analogbufio.BufferedIn(board.GP26, sample_rate=sampling_rate) as adcbuf:
         adcbuf.readinto(adc_read_buffer)
@@ -339,21 +408,42 @@ while True:
     data = from_uint16_buffer(
         adc_read_buffer
     )  # faster than np.array(adc_read_buffer) ?
-    # run a median filter on data, 5 long kernel
-    data = [
-        np.median(data[i - median_half_span : i + median_half_span])
-        for i in data_post_median_filt_indices
-    ]
-    p_data = np.polyfit(t_vec, data, 1)
-    data = data - np.polyval(p_data, t_vec)
+    ss = spectrogram(data)
+    pow = ss[target_freq_i]
+    base_pow = ss[base_freq_i]
+    # for i in range(64):
+    #     print(i*8, ss[i * 8 : (i+1) * 8])
 
+    # # run a median filter on data, 5 long kernel
+    # data = [
+    #     np.median(data[i - median_half_span : i + median_half_span])
+    #     for i in data_post_median_filt_indices
+    # ]
+    # p_data = np.polyfit(t_vec, data, 1)
+    # data = data - np.polyval(p_data, t_vec)
+
+    # # taking the median didn't work too well.
+    # # maybe try grounding the source for some amount of time before looking for the ac signal?
+    # # i should print the raw signal again, as i'm not sure if it's actually the spikes that are the issue
+    # # next option - try ai/llm ; record as many vectors as i can, and start looking for an abstract discrimination function
+    # # with the caveat that it must be easily codeable in python, and must finish in lets say < 50 msec.
+    # box_n = 256 # try to limit to ~ 150 if printing.
+    # pow_sec_v = []
+    # for start_i in np.arange(0, len(data), box_n):
+    #     pow_sec = goertzel_algorithm(
+    #         data[int(start_i) : int(start_i + box_n)], sample_rate=sampling_rate, analysis_frequency=target_freq
+    #     )
+    #     pow_sec_v.append(pow_sec)
+    #     print(f"{start_i=}, {pow_sec=}")
+    #     #print_vec_horizontal(data[int(start_i) : int(start_i + box_n)], span= 5000, divisions= 32)
+    # print(f"{np.median(np.array(pow_sec_v[2:]))=}")
     # timed it - took ~ 3 msec for a 500 long buffer. not too awful.
-    pow = goertzel_algorithm(
-        data, sample_rate=sampling_rate, analysis_frequency=target_freq
-    )
-    base_pow = goertzel_algorithm(
-        data, sample_rate=sampling_rate, analysis_frequency=base_freq
-    )
+    # pow = goertzel_algorithm(
+    #     data, sample_rate=sampling_rate, analysis_frequency=target_freq
+    # )
+    # base_pow = goertzel_algorithm(
+    #     data, sample_rate=sampling_rate, analysis_frequency=base_freq
+    # )
     t_analysis_end_ns = time.monotonic_ns()
     print(f"Analysis too {t_analysis_end_ns - t_analysis_start_ns} nanosec")
     # moving the validity call to the display / control side.
