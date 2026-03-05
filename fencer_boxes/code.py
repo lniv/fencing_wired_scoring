@@ -164,76 +164,6 @@ pwm_out = pwmio.PWMOut(
 print(f"Playing pwm at {out_freq} on {Lame_A_pin}")
 
 
-# # pretty much as taken from a random google search,
-# def goertzel_algorithm(samples, sample_rate, analysis_frequency):
-#     """
-#     Implements the Goertzel algorithm to find the power of a single frequency.
-
-#     Args:
-#         samples (list or np.array): The input signal (time domain samples).
-#         sample_rate (int): The sampling rate of the signal (Hz).
-#         analysis_frequency (float): The frequency to detect (Hz).
-
-#     Returns:
-#         float: The magnitude squared (power) of the target frequency.
-#     """
-#     N = len(samples)
-#     # Calculate the target frequency index 'k'
-#     k = (N * analysis_frequency) / sample_rate
-#     # Calculate the coefficient 'w_real' (cosine) and 'w_imag' (sine)
-#     omega = 2.0 * math.pi * k / N
-#     cosine = math.cos(omega)
-#     coefficient = 2.0 * cosine
-
-#     # Initialize the two internal states (delays)
-#     d1 = 0.0
-#     d2 = 0.0
-
-#     # Perform the main filtering loop
-#     for sample in samples:
-#         d0 = sample + coefficient * d1 - d2
-#         d2 = d1
-#         d1 = d0
-
-#     # Calculate the power (magnitude squared)
-#     # The result is equivalent to d1**2 + d2**2 - coefficient * d1 * d2
-#     power = d2**2 + d1**2 - coefficient * d1 * d2
-#     return power
-
-
-# def print_vec_horizontal(vec, divisions=32, span: float | None = 10000):
-#     """
-#     shows a trace of a vector, as the line separating stars from spaces
-
-#     Args:
-#         divisions: number of divisions we'll "plot" to
-#         span: if None, use data to calculate span, otherwise fixed span [10000]
-#     """
-#     # can't handle 0's, so we'll do this manually
-#     # vec = [np.log2(x)  if x >= 1 else 0 for x in vec]
-#     min_vec = np.min(vec)
-#     max_vec = np.max(vec)
-#     if span is None:
-#         if max_vec - min_vec < divisions:
-#             span = divisions
-#             print(f"{max_vec=}, {min_vec=} are too close, setting {span=}")
-#             # (i could just return here...)
-#         else:
-#             span = max_vec - min_vec
-#             print(f"{max_vec=}, {min_vec=} are sane, {span=}")
-#     else:
-#         print(f"as requested {span=}")
-#     print(f"{max_vec=}")
-#     for i in range(divisions - 1, -1, -1):
-#         # figure out which elements are above this height, and put an astrisk for them.
-#         line = "".join(
-#             # ["*" if not i+1 >= max_height * (x - min_vec) / span_vec >= i else " " for x in vec]
-#             ["*" if divisions * (x - min_vec) / span >= i else " " for x in vec]
-#         )
-#         print(line)
-#     print(f"{min_vec=}")
-
-
 # i could make it take e.g. a data class instance, but i'm worried about speed
 # and don't want to bother profiling; for now there aren't many messages, so i think ok.
 def send_msg(msg: str, t_msg_ns: int, send_for_nanosec: int = 0) -> bool:
@@ -382,6 +312,8 @@ while True:
     t_now_ns = time.monotonic_ns()
     # drop the pullup, let the input float, so we don't rail things now.
     tip_B_pull_up_pin.switch_to_input(pull=None)
+    # # maybe try grounding the source for some amount of time before looking for the ac signal?
+
     # wait some amount of time, then record vector (and a short one - it seemed best to wait more!)
     if detection_to_sampling_sec > 0:
         time.sleep(detection_to_sampling_sec)
@@ -411,39 +343,7 @@ while True:
     ss = spectrogram(data)
     pow = ss[target_freq_i]
     base_pow = ss[base_freq_i]
-    # for i in range(64):
-    #     print(i*8, ss[i * 8 : (i+1) * 8])
 
-    # # run a median filter on data, 5 long kernel
-    # data = [
-    #     np.median(data[i - median_half_span : i + median_half_span])
-    #     for i in data_post_median_filt_indices
-    # ]
-    # p_data = np.polyfit(t_vec, data, 1)
-    # data = data - np.polyval(p_data, t_vec)
-
-    # # taking the median didn't work too well.
-    # # maybe try grounding the source for some amount of time before looking for the ac signal?
-    # # i should print the raw signal again, as i'm not sure if it's actually the spikes that are the issue
-    # # next option - try ai/llm ; record as many vectors as i can, and start looking for an abstract discrimination function
-    # # with the caveat that it must be easily codeable in python, and must finish in lets say < 50 msec.
-    # box_n = 256 # try to limit to ~ 150 if printing.
-    # pow_sec_v = []
-    # for start_i in np.arange(0, len(data), box_n):
-    #     pow_sec = goertzel_algorithm(
-    #         data[int(start_i) : int(start_i + box_n)], sample_rate=sampling_rate, analysis_frequency=target_freq
-    #     )
-    #     pow_sec_v.append(pow_sec)
-    #     print(f"{start_i=}, {pow_sec=}")
-    #     #print_vec_horizontal(data[int(start_i) : int(start_i + box_n)], span= 5000, divisions= 32)
-    # print(f"{np.median(np.array(pow_sec_v[2:]))=}")
-    # timed it - took ~ 3 msec for a 500 long buffer. not too awful.
-    # pow = goertzel_algorithm(
-    #     data, sample_rate=sampling_rate, analysis_frequency=target_freq
-    # )
-    # base_pow = goertzel_algorithm(
-    #     data, sample_rate=sampling_rate, analysis_frequency=base_freq
-    # )
     t_analysis_end_ns = time.monotonic_ns()
     print(f"Analysis too {t_analysis_end_ns - t_analysis_start_ns} nanosec")
     # moving the validity call to the display / control side.
