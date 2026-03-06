@@ -72,7 +72,7 @@ wireless_minimal_keys = (
     "display_port",
     "send_touch_for_msec",
     "min_valid_power",
-    "min_valid_power_ratio",
+    "min_valid_weighted_ratio",
 )
 for name in wireless_minimal_keys:
     settings[name] = getenv(name)
@@ -451,9 +451,9 @@ class WirelessFencingStatus(FencingStaus):
     def __init__(self, update_images_when_announcing=False):
         super().__init__(update_images_when_announcing)
         self.min_valid_power = float(settings["min_valid_power"])
-        self.min_valid_power_ratio = float(settings["min_valid_power_ratio"])
+        self.min_valid_weighted_ratio = float(settings["min_valid_weighted_ratio"])
         print(
-            f"Valid touches require {self.min_valid_power=} and {self.min_valid_power_ratio=}"
+            f"Valid touches require {self.min_valid_power=} and {self.min_valid_weighted_ratio=}"
         )
         print("Creating access point...")
         wifi.radio.start_ap(
@@ -523,7 +523,7 @@ class WirelessFencingStatus(FencingStaus):
                 # we get e.g.
                 # 11509622741708;40710445;1;right,touched,74,804336.0,7.65303e+08
                 t_sent, dt_ns, repeat_i, msg = data.split(";")
-                side, action, action_i, pow_s, base_pow_s = msg.split(",")
+                side, action, action_i, pow_s, off_peak_pow_s = msg.split(",")
                 if not side in ("right", "left"):
                     raise ValueError(f"{msg} must start with right or left.")
                 if action == "touched":
@@ -567,12 +567,24 @@ class WirelessFencingStatus(FencingStaus):
                         self.status[side]["touch_started_msec"] = time_of_hit
                         # t_pre_valid_check_ns = time.monotonic_ns()
                         pow = float(pow_s)
-                        base_pow = float(base_pow_s)
+                        off_peak_pow = float(off_peak_pow_s)
+                        # compromise of signal strength and peak prominence.
+                        # require high prominence from marginal signal, but accept
+                        # lesser prominence from stronger ones
+                        # timed this at below 0.25 msec
+                        # t_pre = time.monotonic_ns()
+                        pow_to_off_peak_ratio = pow / off_peak_pow
+                        pow_to_threshold_ratio = pow / self.min_valid_power
+                        goodness = pow_to_off_peak_ratio * pow_to_threshold_ratio
                         self.status[side]["valid"] = (
-                            pow >= self.min_valid_power
-                            and pow / base_pow > self.min_valid_power_ratio
+                            pow_to_threshold_ratio > 1
+                            and goodness >= self.min_valid_weighted_ratio
                         )
-                        print(f"{pow=}, {base_pow=}, {(pow / base_pow)=:0.2f}")
+                        # t_post = time.monotonic_ns()
+                        # print(f"{(t_post - t_pre)=}")
+                        print(
+                            f"{pow=}, {off_peak_pow=}, {(pow_to_off_peak_ratio)=:0.2f}"
+                        )
                         # t_post_valid_check_ns = time.monotonic_ns()
                         self.announce(side)
                         # post_announce_t_ns = time.monotonic_ns()

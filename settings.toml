@@ -54,11 +54,12 @@ min_touch_msec = 14
 # i.e. they are the ones the other side is checking for.
 left_Hz = 13000
 right_Hz = 11000
-# frequency we can use to figure out base levels.
-base_Hz = 9000
-min_valid_power = "5e4"
-# ratio between target and base frequency powers.
-min_valid_power_ratio = 0
+# frequency offset we can use to figure out base levels vs peak
+off_peak_offset_Hz = 300
+min_valid_power = "2.5e4"
+# min ratio between target and off target/peak frequency power.
+# multiplied / weighted by the ratio to min_valid_power
+min_valid_weighted_ratio = 8
 dormant_after_hit_msec = 500  # can be much shorter, but find it a bit annoying in practice.
 message_repeat_min_msec = 5
 message_repeat_max_msec = 20

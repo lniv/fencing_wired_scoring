@@ -55,7 +55,7 @@ for name in (
     "sampling_time_msec",
     "left_Hz",
     "right_Hz",
-    "base_Hz",
+    "off_peak_offset_Hz",
     "min_valid_power",
     "send_touch_for_msec",
     "dormant_after_hit_msec",
@@ -83,19 +83,16 @@ print(
     f"{requested_sampling_time_sec=}, selecting closest 2**n so that {sampling_time_sec=}, {array_length=}"
 )
 # now find the best match for frequencies.
-requested_base_freq = settings["base_Hz"]
 requested_right_freq = settings["right_Hz"]
 requested_left_freq = settings["left_Hz"]
 spectrogram_fs = np.linspace(0, sampling_rate / 2, int(array_length / 2 + 1))
-base_freq_i = np.argmin(abs(spectrogram_fs - requested_base_freq))
 right_freq_i = np.argmin(abs(spectrogram_fs - requested_right_freq))
 left_freq_i = np.argmin(abs(spectrogram_fs - requested_left_freq))
+# casting these since one will be use for a pwm call that takes an integer.
 # it's true that these won't be exact, but 0.5 Hz offset seems acceptable.
-base_freq = int(spectrogram_fs[base_freq_i])
 right_freq = int(spectrogram_fs[right_freq_i])
 left_freq = int(spectrogram_fs[left_freq_i])
-print(f"Optimizing to match spectrogram frequencies")
-print(f"{requested_base_freq=} changed to {base_freq=}, {base_freq_i=}")
+print(f"Optimized to match spectrogram frequencies")
 print(f"{requested_right_freq=} changed to {right_freq=}, {right_freq_i=}")
 print(f"{requested_left_freq=} changed to {left_freq=}, {left_freq_i=}")
 
@@ -112,6 +109,19 @@ else:
     raise RuntimeError(
         f"{settings['fencer']=} but we must be FENCER = RIGHT or FENCER = LEFT in settings.toml"
     )
+
+requested_off_peak_offset = settings["off_peak_offset_Hz"]
+below_peak_i = np.argmin(
+    abs(spectrogram_fs - (target_freq - requested_off_peak_offset))
+)
+above_peak_i = np.argmin(
+    abs(spectrogram_fs - (target_freq + requested_off_peak_offset))
+)
+off_peak_freqs = [spectrogram_fs[below_peak_i], spectrogram_fs[above_peak_i]]
+print(
+    f"Off peak {requested_off_peak_offset=} changed to {off_peak_freqs=}, {below_peak_i=}, {above_peak_i=}"
+)
+
 
 # we have a few floating point values, that due to the circuitpython toml limitations,
 # must be loaded as ints. i might just change ot defining them otherwise...
@@ -135,7 +145,7 @@ print(
 print("settings.toml looks sane; proceeding.")
 
 print(
-    f"{we_are=}, output at {out_freq} Hz, looking for {target_freq} Hz, analyzing {base_freq} Hz as well"
+    f"{we_are=}, output at {out_freq} Hz, looking for {target_freq} Hz, {off_peak_freqs=} Hz"
 )
 
 # hardware / pin definitions and setup
@@ -342,7 +352,8 @@ while True:
     )  # faster than np.array(adc_read_buffer) ?
     ss = spectrogram(data)
     pow = ss[target_freq_i]
-    base_pow = ss[base_freq_i]
+    # use simple mean of the above and below peak frequencies.
+    off_peak_pow = 0.5 * (ss[below_peak_i] + ss[above_peak_i])
 
     t_analysis_end_ns = time.monotonic_ns()
     print(f"Analysis too {t_analysis_end_ns - t_analysis_start_ns} nanosec")
@@ -350,7 +361,7 @@ while True:
     # i avoided it in the past to shorten cycle time, but timing it at 0.2 msec on an esp32-s3
     # in circuitpython, even with float conversions, so acceptable for now and makes debugging
     # easier.
-    msg = f"{we_are},touched,{touch_i},{pow},{base_pow}"
+    msg = f"{we_are},touched,{touch_i},{pow},{off_peak_pow}"
     # send, willing to repeat for some amount of time.
     send_msg(msg, t_now_ns, send_touch_for_ns)
     time_since_press_sec = (time.monotonic_ns() - t_now_ns) / 1e9
