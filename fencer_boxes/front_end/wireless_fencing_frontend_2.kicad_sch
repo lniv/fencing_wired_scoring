@@ -1667,6 +1667,12 @@
 		(color 0 0 0 0)
 		(uuid "eabde6e0-bfbf-483f-8f0c-18b7005536ea")
 	)
+	(junction
+		(at 176.53 101.6)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "ff50b488-47e5-4059-ba88-3cc0359824b9")
+	)
 	(wire
 		(pts
 			(xy 83.82 118.11) (xy 93.98 118.11)
@@ -1776,6 +1782,16 @@
 			(type default)
 		)
 		(uuid "1b3f917c-c33f-4965-b44f-e62a7ab0f65a")
+	)
+	(wire
+		(pts
+			(xy 132.08 91.44) (xy 132.08 110.49)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1bc0d353-5f2b-4474-ae9c-8bf2f734feb2")
 	)
 	(wire
 		(pts
@@ -1949,16 +1965,6 @@
 	)
 	(wire
 		(pts
-			(xy 132.08 106.68) (xy 184.15 106.68)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "76f8bc4a-4f69-4c46-8df8-c708576bedb1")
-	)
-	(wire
-		(pts
 			(xy 107.95 118.11) (xy 132.08 118.11)
 		)
 		(stroke
@@ -1979,16 +1985,6 @@
 	)
 	(wire
 		(pts
-			(xy 184.15 106.68) (xy 184.15 101.6)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "7fda2f67-37df-441c-925a-53e545063e7d")
-	)
-	(wire
-		(pts
 			(xy 167.64 118.11) (xy 167.64 123.19)
 		)
 		(stroke
@@ -1996,16 +1992,6 @@
 			(type default)
 		)
 		(uuid "818046b7-3023-4280-b130-dc7786698574")
-	)
-	(wire
-		(pts
-			(xy 132.08 110.49) (xy 132.08 106.68)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "8520c78f-384b-4d5a-ac53-5b53c972d083")
 	)
 	(wire
 		(pts
@@ -2069,6 +2055,26 @@
 	)
 	(wire
 		(pts
+			(xy 176.53 114.3) (xy 189.23 114.3)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9d355ae5-3702-40e5-b3a6-271991e89b23")
+	)
+	(wire
+		(pts
+			(xy 176.53 109.22) (xy 176.53 114.3)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9d616783-560d-49e8-b7f6-2fe40838f567")
+	)
+	(wire
+		(pts
 			(xy 86.36 106.68) (xy 116.84 106.68)
 		)
 		(stroke
@@ -2096,6 +2102,16 @@
 			(type default)
 		)
 		(uuid "ac9b4e28-3926-4cc2-93d1-926acf024be4")
+	)
+	(wire
+		(pts
+			(xy 176.53 101.6) (xy 176.53 91.44)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b04c97b1-0829-431a-af1e-a672e0009ff6")
 	)
 	(wire
 		(pts
@@ -2226,6 +2242,16 @@
 			(type default)
 		)
 		(uuid "f1376197-bf14-40a0-adc4-baedfa6a3a81")
+	)
+	(wire
+		(pts
+			(xy 176.53 91.44) (xy 132.08 91.44)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f2275c9d-8f10-444d-ac2a-c46b20afbfc9")
 	)
 	(wire
 		(pts
@@ -2585,6 +2611,76 @@
 			(project "wireless_fencing_frontend_2"
 				(path "/68d4213b-91f0-4b51-a69b-1e4a432a965b"
 					(reference "D2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_US")
+		(at 176.53 105.41 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "46fc2249-14e3-4f6c-9bd5-babfe419a571")
+		(property "Reference" "C3"
+			(at 180.34 104.3939 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1nF"
+			(at 180.34 106.9339 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
+			(at 176.53 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 176.53 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "capacitor, US symbol"
+			(at 176.53 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "95da503e-34e4-49cf-a916-effc310be03e")
+		)
+		(pin "1"
+			(uuid "1250ca25-df0a-446d-b73b-d97e7ebddd9d")
+		)
+		(instances
+			(project "wireless_fencing_frontend_2"
+				(path "/68d4213b-91f0-4b51-a69b-1e4a432a965b"
+					(reference "C3")
 					(unit 1)
 				)
 			)
@@ -3064,6 +3160,74 @@
 			(project "wireless_fencing_frontend_2"
 				(path "/68d4213b-91f0-4b51-a69b-1e4a432a965b"
 					(reference "R7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_US")
+		(at 180.34 101.6 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "6d3cbc99-c193-4011-b170-af94f198b98d")
+		(property "Reference" "R2"
+			(at 180.34 95.25 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "10k"
+			(at 180.34 97.79 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
+			(at 180.086 102.616 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 180.34 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor, US symbol"
+			(at 180.34 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "c42721d8-48ce-4bc5-b364-0b92280db717")
+		)
+		(pin "1"
+			(uuid "d2bb6d8a-94de-4282-9d95-e09092dc70d9")
+		)
+		(instances
+			(project "wireless_fencing_frontend_2"
+				(path "/68d4213b-91f0-4b51-a69b-1e4a432a965b"
+					(reference "R2")
 					(unit 1)
 				)
 			)
