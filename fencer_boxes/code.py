@@ -111,12 +111,12 @@ else:
     )
 
 requested_off_peak_offset = settings["off_peak_offset_Hz"]
-below_peak_i = np.argmin(
-    abs(spectrogram_fs - (target_freq - requested_off_peak_offset))
-)
-above_peak_i = np.argmin(
-    abs(spectrogram_fs - (target_freq + requested_off_peak_offset))
-)
+# rather than look for best below/above indices, which may be not be exactly opposite,
+# calculate an optimum delta
+delta_i = np.argmin(abs(spectrogram_fs - requested_off_peak_offset))
+below_peak_i = target_freq_i - delta_i
+above_peak_i = target_freq_i + delta_i
+
 off_peak_freqs = [spectrogram_fs[below_peak_i], spectrogram_fs[above_peak_i]]
 print(
     f"Off peak {requested_off_peak_offset=} changed to {off_peak_freqs=}, {below_peak_i=}, {above_peak_i=}"
