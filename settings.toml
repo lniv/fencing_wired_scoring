@@ -56,10 +56,10 @@ left_Hz = 13000
 right_Hz = 11000
 # frequency offset we can use to figure out base levels vs peak
 off_peak_offset_Hz = 300
-min_valid_power = "2.5e4"
+min_valid_power = "1.2e4"
 # min ratio between target and off target/peak frequency power.
 # multiplied / weighted by the ratio to min_valid_power
-min_valid_weighted_ratio = 8
+min_valid_weighted_ratio = 5
 dormant_after_hit_msec = 500  # can be much shorter, but find it a bit annoying in practice.
 message_repeat_min_msec = 5
 message_repeat_max_msec = 20

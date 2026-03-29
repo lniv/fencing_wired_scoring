@@ -1559,7 +1559,7 @@
 		)
 		(uuid "79895161-97ac-42f4-94ab-b2023cc69a88")
 	)
-	(text "R6 must be much larger than the protection resistor,\nso that when the tip switch is closed, 'we're at ground."
+	(text "R6 must be much larger than the protection resistor + common to ground resistor\nso that when the tip switch is closed, 'we're at ground."
 		(exclude_from_sim no)
 		(at 217.932 64.516 0)
 		(effects
@@ -1578,6 +1578,17 @@
 			)
 		)
 		(uuid "afe390a1-bfdd-4197-9167-a44bf6ddf28c")
+	)
+	(text "adding a pulldown to the lame line.\nwould make voltage more deterministic.\nneeds to be small enough that a lame to weapon common\n  short is not a problem.\nnote: this will be a significant draw - e.g. 300 ohm\nis 10mA (30mW), but not dominant vs e.g. pico2w"
+		(exclude_from_sim no)
+		(at 209.042 141.478 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "b37a0873-d6a2-4753-abc8-0f1749ce2910")
 	)
 	(text "I want the lame detecetion to not have a DC connection to the weapon point\nwhen we're touching.\nSo i'll connect the point in front of the decoupling capacitor\nto two digital lines, through resistors. One is used to pull it up,\nthe other (20k) to sense; if low, we're not touching, if high, we are\n(circuit was opened), and we can check for presence of\nAC signal (setting the pull up line to high impedance)"
 		(exclude_from_sim no)
@@ -1630,6 +1641,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "666b4306-e151-4863-9986-5d499b259eb0")
+	)
+	(junction
+		(at 250.19 123.19)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "7d675e39-223b-41d8-87dd-8d8ff573bffb")
 	)
 	(junction
 		(at 212.09 114.3)
@@ -1845,6 +1862,16 @@
 	)
 	(wire
 		(pts
+			(xy 223.52 114.3) (xy 227.33 114.3)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "37f3485d-1f61-4d7a-9282-5f68a5d111d4")
+	)
+	(wire
+		(pts
 			(xy 212.09 121.92) (xy 212.09 123.19)
 		)
 		(stroke
@@ -1895,7 +1922,7 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 114.3) (xy 227.33 114.3)
+			(xy 212.09 114.3) (xy 215.9 114.3)
 		)
 		(stroke
 			(width 0)
@@ -2394,6 +2421,76 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:R_US")
+		(at 250.19 127 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "07204785-9b5d-4fd1-9956-37fb2d667cc1")
+		(property "Reference" "R10"
+			(at 252.73 125.7299 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "200"
+			(at 252.73 128.2699 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
+			(at 249.174 126.746 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 250.19 127 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor, US symbol"
+			(at 250.19 127 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "4bad9e18-479a-4334-9d1e-ba7534f25e13")
+		)
+		(pin "2"
+			(uuid "4f10508c-d4d8-4d6b-9774-e1a5a60a2b64")
+		)
+		(instances
+			(project "wireless_fencing_frontend_2"
+				(path "/68d4213b-91f0-4b51-a69b-1e4a432a965b"
+					(reference "R10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Connector_Generic:Conn_01x08")
 		(at 96.52 93.98 0)
 		(unit 1)
@@ -2547,6 +2644,140 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:R_US")
+		(at 219.71 114.3 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "33fbf176-122d-4ef2-b1da-fc6e9ce648c3")
+		(property "Reference" "R3"
+			(at 219.71 107.95 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "2k"
+			(at 219.71 110.49 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
+			(at 219.964 113.284 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 219.71 114.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor, US symbol"
+			(at 219.71 114.3 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "314bfb1d-7df5-4140-8f77-d0ba23757671")
+		)
+		(pin "1"
+			(uuid "8c98ed65-b9e1-4675-9d74-5d8c719960be")
+		)
+		(instances
+			(project "wireless_fencing_frontend_2"
+				(path "/68d4213b-91f0-4b51-a69b-1e4a432a965b"
+					(reference "R3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:Earth")
+		(at 250.19 130.81 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "3a73816b-8c3a-4bf6-9ae0-ff45492dfa0c")
+		(property "Reference" "#PWR03"
+			(at 250.19 137.16 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "Earth"
+			(at 250.19 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 250.19 130.81 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 250.19 130.81 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"Earth\""
+			(at 250.19 130.81 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "1ee69a61-d7a0-4b33-956a-c40103ccde7e")
+		)
+		(instances
+			(project "wireless_fencing_frontend_2"
+				(path "/68d4213b-91f0-4b51-a69b-1e4a432a965b"
+					(reference "#PWR03")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:D_TVS_Small")
 		(at 212.09 107.95 90)
 		(unit 1)
@@ -2554,7 +2785,6 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "3e7778f3-ca53-4310-a928-fce945abbfe5")
 		(property "Reference" "D2"
 			(at 214.63 106.6799 90)
@@ -2566,7 +2796,7 @@
 			)
 		)
 		(property "Value" "SLESD5491S"
-			(at 214.63 109.2199 90)
+			(at 198.882 110.744 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3895,7 +4125,7 @@
 				)
 			)
 		)
-		(property "Value" "2k"
+		(property "Value" "100"
 			(at 233.68 119.38 90)
 			(effects
 				(font
