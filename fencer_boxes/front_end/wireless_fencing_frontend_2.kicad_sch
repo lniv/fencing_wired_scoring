@@ -1581,7 +1581,7 @@
 	)
 	(text "adding a pulldown to the lame line.\nwould make voltage more deterministic.\nneeds to be small enough that a lame to weapon common\n  short is not a problem.\nnote: this will be a significant draw - e.g. 300 ohm\nis 10mA (30mW), but not dominant vs e.g. pico2w"
 		(exclude_from_sim no)
-		(at 209.042 141.478 0)
+		(at 259.08 129.286 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -1589,6 +1589,17 @@
 			(justify left)
 		)
 		(uuid "b37a0873-d6a2-4753-abc8-0f1749ce2910")
+	)
+	(text "capacitor to break DC connection - otherwise,\nif the tow foils touch the oppsite lames at the same time,\nthe drive on the lames can backdrive the tip test point, and lead\nto a false indication of tip closure."
+		(exclude_from_sim no)
+		(at 251.714 101.346 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "c14b9529-f88e-4aaf-93c6-d10b64092938")
 	)
 	(text "I want the lame detecetion to not have a DC connection to the weapon point\nwhen we're touching.\nSo i'll connect the point in front of the decoupling capacitor\nto two digital lines, through resistors. One is used to pull it up,\nthe other (20k) to sense; if low, we're not touching, if high, we are\n(circuit was opened), and we can check for presence of\nAC signal (setting the pull up line to high impedance)"
 		(exclude_from_sim no)
@@ -2162,6 +2173,16 @@
 	)
 	(wire
 		(pts
+			(xy 250.19 114.3) (xy 250.19 123.19)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b20d1109-aa7f-43c1-9fe5-0db820a3763b")
+	)
+	(wire
+		(pts
 			(xy 205.74 101.6) (xy 212.09 101.6)
 		)
 		(stroke
@@ -2342,7 +2363,7 @@
 	)
 	(wire
 		(pts
-			(xy 250.19 92.71) (xy 250.19 123.19)
+			(xy 250.19 92.71) (xy 250.19 106.68)
 		)
 		(stroke
 			(width 0)
@@ -3761,6 +3782,76 @@
 			(project "wireless_fencing_frontend_2"
 				(path "/68d4213b-91f0-4b51-a69b-1e4a432a965b"
 					(reference "#PWR011")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_US")
+		(at 250.19 110.49 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "a8fac73f-a97b-4976-bf0b-d343465ce9a7")
+		(property "Reference" "C4"
+			(at 254 109.4739 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 254 112.0139 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
+			(at 250.19 110.49 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 250.19 110.49 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "capacitor, US symbol"
+			(at 250.19 110.49 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "66782217-9dc7-4a1f-800d-6727b1e8b92d")
+		)
+		(pin "1"
+			(uuid "3c87b222-b40f-4ec2-9baa-82ca982b52e8")
+		)
+		(instances
+			(project "wireless_fencing_frontend_2"
+				(path "/68d4213b-91f0-4b51-a69b-1e4a432a965b"
+					(reference "C4")
 					(unit 1)
 				)
 			)
