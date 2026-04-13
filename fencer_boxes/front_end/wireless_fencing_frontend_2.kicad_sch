@@ -1579,7 +1579,7 @@
 		)
 		(uuid "afe390a1-bfdd-4197-9167-a44bf6ddf28c")
 	)
-	(text "adding a pulldown to the lame line.\nwould make voltage more deterministic.\nneeds to be small enough that a lame to weapon common\n  short is not a problem.\nnote: this will be a significant draw - e.g. 300 ohm\nis 10mA (30mW), but not dominant vs e.g. pico2w"
+	(text "adding a pulldown to the lame line.\nwould make voltage more deterministic.\nneeds to be small enough that a lame to weapon common\n  short is not a problem.\nnote: this will be a significant draw - e.g. 300 ohm\nis 10mA (30mW), but not dominant vs e.g. pico2w\nfurther reducing this to be the only load, so more extreme."
 		(exclude_from_sim no)
 		(at 259.08 129.286 0)
 		(effects
@@ -2449,7 +2449,6 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "07204785-9b5d-4fd1-9956-37fb2d667cc1")
 		(property "Reference" "R10"
 			(at 252.73 125.7299 0)
@@ -3806,7 +3805,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "100nF"
+		(property "Value" "10uF"
 			(at 254 112.0139 0)
 			(effects
 				(font
@@ -4216,7 +4215,7 @@
 				)
 			)
 		)
-		(property "Value" "100"
+		(property "Value" "0"
 			(at 233.68 119.38 90)
 			(effects
 				(font

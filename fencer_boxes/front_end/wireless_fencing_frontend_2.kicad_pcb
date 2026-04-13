@@ -2841,7 +2841,7 @@
 				)
 			)
 		)
-		(property "Value" "100"
+		(property "Value" "0"
 			(at -1.8 -1.7 180)
 			(layer "F.SilkS")
 			(uuid "1cffb26e-b9cd-45e0-b1ae-af18fbb993a8")
@@ -3708,7 +3708,7 @@
 				)
 			)
 		)
-		(property "Value" "100nF"
+		(property "Value" "10uF"
 			(at -0.35 1.6 0)
 			(layer "F.SilkS")
 			(uuid "20ac4cc2-da4a-4451-9e83-adc8d83c46d6")
@@ -4395,7 +4395,7 @@
 		(layer "Edge.Cuts")
 		(uuid "7b1979b0-45d0-41e4-a47d-59e71516939e")
 	)
-	(gr_text "Rev 6"
+	(gr_text "Rev 7"
 		(at 157.2 63.3 0)
 		(layer "F.SilkS")
 		(uuid "ca6396da-98bc-420b-a9b0-19db7a9009c9")
