@@ -176,10 +176,11 @@ print(f"Playing pwm at {out_freq} on {Lame_A_pin}")
 
 # i could make it take e.g. a data class instance, but i'm worried about speed
 # and don't want to bother profiling; for now there aren't many messages, so i think ok.
-def send_msg(msg: str, t_msg_ns: int, send_for_nanosec: int = 0) -> bool:
+def send_msg(sock, msg: str, t_msg_ns: int, send_for_nanosec: int = 0) -> bool:
     """
     send a message to the display - which will have to parse it; simple string.
     Args:
+        sock: socket to use for receiving / sending
         msg: send this to our display.
         t_msg_ns: when it happened, in nanosec.
         send_for_nanosec: will continue sending till t_msg + this expires, randomly.
@@ -187,14 +188,13 @@ def send_msg(msg: str, t_msg_ns: int, send_for_nanosec: int = 0) -> bool:
         True if it managed to get through, False otherwise.
     """
     t_m1_ns = time.monotonic_ns()
-    # TODO: refactor this so i don't have to create it each time?
-    sock = pool.socket(pool.AF_INET, pool.SOCK_DGRAM)
+    buffer = bytearray(1024)
     print(
         f"Took {(1e-6 * (time.monotonic_ns() - t_m1_ns)):0.1f} msec to create socket."
     )
     n_sent = 0
     try:
-        # send once, then if we have tine, repeat.
+        # send once, then if we have time, repeat.
         while n_sent < 1 or time.monotonic_ns() - t_msg_ns < send_for_nanosec:
             t_now_ns = time.monotonic_ns()
             n_sent += 1
@@ -212,6 +212,14 @@ def send_msg(msg: str, t_msg_ns: int, send_for_nanosec: int = 0) -> bool:
                     message_repeat_max_sec,
                 )
             )
+            # check if we got something back, if we did, we're done.
+            num_bytes, remote_address = sock.recvfrom_into(buffer)
+            if num_bytes > 0:
+                # should probably check that it came from the right address, and perhaps that something
+                # (message id?) was in it. later.
+                print(f"Received {buffer[:num_bytes]} from {remote_address}, good.")
+                break
+
     except OSError as e:
         if e.args[0] == 118:  # EHOSTUNREACH ; try to reconnect
             print(f"Got {e=}, will try to reconnect.")
@@ -252,7 +260,13 @@ pool = socketpool.SocketPool(wifi.radio)
 print("My MAC addr:", [hex(i) for i in wifi.radio.mac_address])
 #  prints IP address to REPL
 print(f"My IP address is {wifi.radio.ipv4_address}")
-send_msg(f"{we_are},Just woke up,0,None,None", time.monotonic_ns())
+our_addr_s = str(wifi.radio.ipv4_address)
+sock = pool.socket(pool.AF_INET, pool.SOCK_DGRAM)
+sock.settimeout(
+    0.0011
+)  # non blocking. (do we need to handle the exception on timeout?)
+sock.bind((our_addr_s, settings["display_port"]))
+send_msg(sock, f"{we_are},Just woke up,0,None,None", time.monotonic_ns())
 
 
 ############## end network stuff
@@ -277,7 +291,7 @@ adc_read_buffer = array.array("H", [0x0000] * array_length)
 t0_ns = time.monotonic_ns()
 ready_msg = f"{we_are},now in business - looking for hits,0,None,None"
 print(t0_ns, ready_msg)
-send_msg(ready_msg, t0_ns, 0)
+send_msg(sock, ready_msg, t0_ns, 0)
 
 
 def reset_tip_state(ground_sec=0.001, delay_after_sec=0, repeats=1):
@@ -363,7 +377,7 @@ while True:
     # easier.
     msg = f"{we_are},touched,{touch_i},{pow},{off_peak_pow}"
     # send, willing to repeat for some amount of time.
-    send_msg(msg, t_now_ns, send_touch_for_ns)
+    send_msg(sock, msg, t_now_ns, send_touch_for_ns)
     time_since_press_sec = (time.monotonic_ns() - t_now_ns) / 1e9
     # print(t_now_ns, time_since_press_sec, msg + f"; {pow=}")
     print(t_now_ns, time_since_press_sec, msg)
@@ -378,5 +392,5 @@ while True:
     post_announce_t_ns = time.monotonic_ns()
     msg = f"{we_are},Sent hit - slept - back in business,{touch_i},None,None"
     print(post_announce_t_ns, msg + "\n\n")
-    send_msg(msg, post_announce_t_ns)
+    send_msg(sock, msg, post_announce_t_ns)
     touch_i += 1

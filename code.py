@@ -603,6 +603,8 @@ class WirelessFencingStatus(FencingStaus):
                     print(
                         f"Got {data=} from {remote_address}, not a touch, no special handling."
                     )
+                # if we're here, we got a valid message; we should acknowledge it.
+                self.sock.sendto(f"Received {msg}", remote_address)
         except OSError as e:
             if e.args[0] != 116:  # ETIMEDOUT as expected.
                 raise (e)
