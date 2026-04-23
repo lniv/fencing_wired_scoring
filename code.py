@@ -598,7 +598,8 @@ class WirelessFencingStatus(FencingStaus):
                         #     {(recv_ns - t_pre_buff_ns)=}\n\
                         #     {(post_announce_t_ns - now_msec * 1e6)=}"
                         # print(print_s)
-                        self._dump_packets(1e4)
+                        # decided against this, especially since we now won't resend if we got confirmation.
+                        # self._dump_packets(1e4)
                 else:
                     print(
                         f"Got {data=} from {remote_address}, not a touch, no special handling."
