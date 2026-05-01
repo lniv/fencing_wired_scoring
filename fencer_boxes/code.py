@@ -11,9 +11,6 @@ it will have multiple sections:
 
 while i could split the settings to multiple files, i decided i preferred a single file with sections.
 
-i'm intentionally keeping the code simple and linear - i could define classes and attributes,
-but for this it makes sense to just have globals; there's really not much to it (on the fencer side)
-
 NOTE: this was used originally with a pico2W i.e. a RP2350:
 this required working around errata E9 - the pin latches up without an external
 pulldown smaller than 8.2K !!
@@ -174,142 +171,6 @@ pwm_out = pwmio.PWMOut(
 print(f"Playing pwm at {out_freq} on {Lame_A_pin}")
 
 
-# i could make it take e.g. a data class instance, but i'm worried about speed
-# and don't want to bother profiling; for now there aren't many messages, so i think ok.
-def send_msg(msg: str, t_msg_ns: int, send_for_nanosec: int = 0) -> bool:
-    """
-    send a message to the display - which will have to parse it; simple string.
-    Args:
-        msg: send this to our display.
-        t_msg_ns: when it happened, in nanosec.
-        send_for_nanosec: will continue sending till t_msg + this expires, randomly.
-    Returns:
-        True if it managed to get through, False otherwise.
-    """
-    t_m1_ns = time.monotonic_ns()
-    n_sent = 0
-    try:
-        # send once, then if we have time, repeat.
-        while n_sent < 1 or time.monotonic_ns() - t_msg_ns < send_for_nanosec:
-            t_now_ns = time.monotonic_ns()
-            n_sent += 1
-            # dropping spaces for easier processing, at the expense of humans.
-            annotated_msg = f"{t_msg_ns};{t_now_ns - t_msg_ns};{n_sent};{msg}".encode(
-                "utf-8"
-            )
-            num_sent = sock.send(annotated_msg)
-            if num_sent == 0:
-                raise OSError(128)  # not connected.
-            t2_ns = time.monotonic_ns()
-            # times are in nanosec, since it's native. we usually will deal with millisec for humans.
-            print(
-                f"Took {(1e-6 * (t2_ns - t_m1_ns)):0.1f} msec to send {annotated_msg=}, N={num_sent}."
-            )
-            time.sleep(
-                random.uniform(
-                    message_repeat_min_sec,
-                    message_repeat_max_sec,
-                )
-            )
-            # # check if we got something back, if we did, we're done.
-            # buf = bytearray(128)
-            # print("trying to receive")
-            # n_from_display = sock.recv_into(buf)
-            # print(f"Got {n_from_display=}, {buf[:n_from_display]=}")
-            # if n_from_display <= 0:
-            #     print("Socket appears closed.")
-            #     raise OSError(32)  # i know it's not exactly right, but seems closest.
-            break
-
-    except OSError as e:
-        if e.args[0] in (
-            118,  # 118 =EHOSTUNREACH
-            128,  # 128 = ENOTCONN
-            9,  # 9= EBADF
-            32,  # 32 broken pipe
-            116,  # ETIMEDOUT
-        ):  # try to reconnect.
-            print(f"Got {e=}, will try to reconnect.")
-            try:
-                connect_to_server()
-            except Exception as e:
-                try:
-                    print(f"Failed to reconnect due to {e=}")
-                    connect_to_wifi()
-                    time.sleep(0.5)
-                    connect_to_server()
-                except Exception as e:
-                    print(f"Embarrassing, but we can't seen to connect due to {e=}")
-        else:
-            print(f"Got {e=}, not sure what to do about it.")
-    except Exception as e:
-        print(f"Error sending event: {e=}, {type(e)=}")
-    return n_sent > 0
-
-
-############## network setup
-
-
-def connect_to_wifi():
-    """
-    Low level connection to access point
-    Typically, this is run by the server, but not necessarily.
-    """
-    ssid = settings["wifi_ssid"]
-    passwd = settings["wifi_password"]
-    print(f"Connecting to {ssid=}, {passwd=}")
-    wifi.radio.connect(ssid, passwd)
-    print("Connected to WiFi")
-
-
-def connect_to_server() -> socketpool.Socket:
-    """
-    Connect to the display / server.
-    Returns:
-        a live socket
-    """
-    global sock
-    if isinstance(sock, socketpool.Socket):
-        print("Socket existed, closing it before recreating.")
-        sock.close()
-    sock = pool.socket(pool.AF_INET, pool.SOCK_STREAM)
-    sock.setsockopt(pool.IPPROTO_TCP, pool.TCP_NODELAY, 1)
-    # sock.settimeout(1)  # very long, in general we should get something back fast.
-    # this doesn't exist apparently?
-    # sock.setsockopt(pool.SOL_SOCKET, pool.SO_KEEPALIVE, 1)
-    print(f"Connecting to {target_address}")
-    sock.connect(target_address)
-    print("Connected.")
-    return sock
-
-
-print(f"Initial connection to display AP")
-while True:
-    try:
-        connect_to_wifi()
-        break
-    except ConnectionError as e:
-        print(
-            f"t = {(time.monotonic_ns() / 1e9):0.1f} sec: Failed to connect to display due to {e}, will wait 5 sec then retry."
-        )
-        time.sleep(5)
-
-pool = socketpool.SocketPool(wifi.radio)
-
-#  prints MAC address to REPL
-print("My MAC addr:", [hex(i) for i in wifi.radio.mac_address])
-#  prints IP address to REPL
-print(f"My IP address is {wifi.radio.ipv4_address}")
-our_addr_s = str(wifi.radio.ipv4_address)
-
-# i should refactor into a class
-global sock
-sock = None
-connect_to_server()
-send_msg(f"{we_are},Just woke up,0,None,None", time.monotonic_ns())
-
-
-############## end network stuff
 # future / TODO: heartbeat to display / server, get time sync from server?
 detection_to_sampling_sec = (
     settings["min_touch_msec"] - settings["sampling_end_to_min_touch_msec"]
@@ -328,10 +189,19 @@ print(
 print(f"sampling for {sampling_time_sec=}, {sampling_rate=}, N={array_length}")
 adc_read_buffer = array.array("H", [0x0000] * array_length)
 
-t0_ns = time.monotonic_ns()
-ready_msg = f"{we_are},now in business - looking for hits,0,None,None"
-print(t0_ns, ready_msg)
-send_msg(ready_msg, t0_ns, 0)
+
+########### finished setting up
+
+
+def connect_to_wifi():
+    """
+    Low level connection to access point
+    """
+    ssid = settings["wifi_ssid"]
+    passwd = settings["wifi_password"]
+    print(f"Connecting to {ssid=}, {passwd=}")
+    wifi.radio.connect(ssid, passwd)
+    print("Connected to WiFi")
 
 
 def reset_tip_state(ground_sec=0.001, delay_after_sec=0, repeats=1):
@@ -365,72 +235,200 @@ def is_tip_depressed(ground_sense_sec=0.003):
     return tip_B_sense_pin.value  # foil : circuit opens upon touch.
 
 
-min_touch_nsec = settings["min_touch_msec"] * 1e6
-touch_i = 1
+class FencerBox:
+    """
+    Core class looking for hits and sending messages when anything happens.
+    """
+
+    def __init__(self):
+        self.sock = None
+        self.t0_ns = time.monotonic_ns()
+        self.connect_to_server()
+        self.send_msg(f"{we_are},Just woke up,0,None,None", time.monotonic_ns())
+        self.send_msg(
+            f"{we_are},now in business - looking for hits,0,None,None", self.t0_ns, 0
+        )
+        self.run()
+
+    def connect_to_server(self):
+        """
+        Connect to the display / server.
+        Returns:
+            a live socket
+        """
+        if isinstance(self.sock, socketpool.Socket):
+            print("Socket existed, closing it before recreating.")
+            self.sock.close()
+        self.sock = pool.socket(pool.AF_INET, pool.SOCK_STREAM)
+        self.sock.setsockopt(pool.IPPROTO_TCP, pool.TCP_NODELAY, 1)
+        # sock.settimeout(1)  # very long, in general we should get something back fast.
+        # this doesn't exist apparently?
+        # sock.setsockopt(pool.SOL_SOCKET, pool.SO_KEEPALIVE, 1)
+        print(f"Connecting to {target_address}")
+        self.sock.connect(target_address)
+        print("Connected.")
+
+    def send_msg(self, msg: str, t_msg_ns: int, send_for_nanosec: int = 0) -> bool:
+        """
+        send a message to the display - which will have to parse it; simple string.
+        Args:
+            msg: send this to our display.
+            t_msg_ns: when it happened, in nanosec.
+            send_for_nanosec: will continue sending till t_msg + this expires, randomly.
+        Returns:
+            True if it managed to get through, False otherwise.
+        """
+        t_m1_ns = time.monotonic_ns()
+        n_sent = 0
+        try:
+            # send once, then if we have time, repeat.
+            while n_sent < 1 or time.monotonic_ns() - t_msg_ns < send_for_nanosec:
+                t_now_ns = time.monotonic_ns()
+                n_sent += 1
+                # dropping spaces for easier processing, at the expense of humans.
+                annotated_msg = (
+                    f"{t_msg_ns};{t_now_ns - t_msg_ns};{n_sent};{msg}".encode("utf-8")
+                )
+                num_sent = self.sock.send(annotated_msg)
+                if num_sent == 0:
+                    raise OSError(128)  # not connected.
+                t2_ns = time.monotonic_ns()
+                # times are in nanosec, since it's native. we usually will deal with millisec for humans.
+                print(
+                    f"Took {(1e-6 * (t2_ns - t_m1_ns)):0.1f} msec to send {annotated_msg=}, N={num_sent}."
+                )
+                time.sleep(
+                    random.uniform(
+                        message_repeat_min_sec,
+                        message_repeat_max_sec,
+                    )
+                )
+                # # check if we got something back, if we did, we're done.
+                # buf = bytearray(128)
+                # print("trying to receive")
+                # n_from_display = self.sock.recv_into(buf)
+                # print(f"Got {n_from_display=}, {buf[:n_from_display]=}")
+                # if n_from_display <= 0:
+                #     print("Socket appears closed.")
+                #     raise OSError(32)  # i know it's not exactly right, but seems closest.
+                break
+
+        except OSError as e:
+            if e.args[0] in (
+                118,  # 118 =EHOSTUNREACH
+                128,  # 128 = ENOTCONN
+                9,  # 9= EBADF
+                32,  # 32 broken pipe
+                116,  # ETIMEDOUT
+            ):  # try to reconnect.
+                print(f"Got {e=}, will try to reconnect.")
+                try:
+                    self.connect_to_server()
+                except Exception as e:
+                    try:
+                        print(f"Failed to reconnect due to {e=}")
+                        connect_to_wifi()
+                        time.sleep(0.5)
+                        self.connect_to_server()
+                    except Exception as e:
+                        print(f"Embarrassing, but we can't seen to connect due to {e=}")
+            else:
+                print(f"Got {e=}, not sure what to do about it.")
+        except Exception as e:
+            print(f"Error sending event: {e=}, {type(e)=}")
+        return n_sent > 0
+
+    def run(self):
+        min_touch_nsec = settings["min_touch_msec"] * 1e6
+        touch_i = 1
+        while True:
+            # this section till we evaluate the ADC buffer should be in a weapon dependent function.
+            print(f"Waiting before {touch_i=}")
+            # wait for touch, busy loop, doing nothing else to get maximal responsiveness.
+            while not is_tip_depressed():
+                pass
+            t_now_ns = time.monotonic_ns()
+            # drop the pullup, let the input float, so we don't rail things now.
+            tip_B_pull_up_pin.switch_to_input(pull=None)
+            # # maybe try grounding the source for some amount of time before looking for the ac signal?
+
+            # wait some amount of time, then record vector (and a short one - it seemed best to wait more!)
+            if detection_to_sampling_sec > 0:
+                time.sleep(detection_to_sampling_sec)
+            # now record.
+            with analogbufio.BufferedIn(
+                board.GP26, sample_rate=sampling_rate
+            ) as adcbuf:
+                adcbuf.readinto(adc_read_buffer)
+            reset_tip_state(ground_sec=0.001, delay_after_sec=0, repeats=1)
+            # now reactivate the pull up line.
+            tip_B_pull_up_pin.switch_to_output(value=True)
+            # now wait till min touch time has passed.
+            print(f"since touch {(time.monotonic_ns() - t_now_ns)/1e6} msec")
+            while time.monotonic_ns() - t_now_ns < min_touch_nsec:
+                pass
+            # check if the tip is still pressed.
+            # (making it more foil specific for now, will need to refactor later for e.g. epee)
+            if not is_tip_depressed():
+                print(
+                    "failed to find tip still pressed after checking validity, no touch."
+                )
+                continue
+            # we have a valid touch, analyze data now.
+            # calculate power at two frequencies
+            # if this doesn't work (and it didn't do great before), will have to do pseudo -random,
+            # or split the lame generation from the detection much harder (e.g. separate hardware)
+            t_analysis_start_ns = time.monotonic_ns()
+            data = from_uint16_buffer(
+                adc_read_buffer
+            )  # faster than np.array(adc_read_buffer) ?
+            ss = spectrogram(data)
+            pow = ss[target_freq_i]
+            # use simple mean of the above and below peak frequencies.
+            off_peak_pow = 0.5 * (ss[below_peak_i] + ss[above_peak_i])
+
+            t_analysis_end_ns = time.monotonic_ns()
+            print(f"Analysis too {t_analysis_end_ns - t_analysis_start_ns} nanosec")
+            # moving the validity call to the display / control side.
+            # i avoided it in the past to shorten cycle time, but timing it at 0.2 msec on an esp32-s3
+            # in circuitpython, even with float conversions, so acceptable for now and makes debugging
+            # easier.
+            msg = f"{we_are},touched,{touch_i},{pow},{off_peak_pow}"
+            # send, willing to repeat for some amount of time.
+            self.send_msg(msg, t_now_ns, send_touch_for_ns)
+            time_since_press_sec = (time.monotonic_ns() - t_now_ns) / 1e9
+            # print(t_now_ns, time_since_press_sec, msg + f"; {pow=}")
+            print(t_now_ns, time_since_press_sec, msg)
+            # print(f"{time_since_press_sec=:0.4f} {dormant_after_hit_sec=:0.2f}")
+            sleep_t = dormant_after_hit_sec - time_since_press_sec
+            if sleep_t <= 0:
+                print(f"{sleep_t=} <= 0; skipping sleep.")
+            else:
+                print(f"sleeping for {sleep_t:0.3f} sec")
+                repeats = int(sleep_t / 0.01)
+                reset_tip_state(ground_sec=0, delay_after_sec=0.01, repeats=repeats)
+            post_announce_t_ns = time.monotonic_ns()
+            msg = f"{we_are},Sent hit - slept - back in business,{touch_i},None,None"
+            print(post_announce_t_ns, msg + "\n\n")
+            self.send_msg(msg, post_announce_t_ns)
+            touch_i += 1
+
+
+######################### actually do something.
+print(f"Initial connection to display AP")
 while True:
-    # this section till we evaluate the ADC buffer should be in a weapon dependent function.
-    print(f"Waiting before {touch_i=}")
-    # wait for touch, busy loop, doing nothing else to get maximal responsiveness.
-    while not is_tip_depressed():
-        pass
-    t_now_ns = time.monotonic_ns()
-    # drop the pullup, let the input float, so we don't rail things now.
-    tip_B_pull_up_pin.switch_to_input(pull=None)
-    # # maybe try grounding the source for some amount of time before looking for the ac signal?
+    try:
+        connect_to_wifi()
+        break
+    except ConnectionError as e:
+        print(
+            f"t = {(time.monotonic_ns() / 1e9):0.1f} sec: Failed to connect to display due to {e}, will wait 5 sec then retry."
+        )
+        time.sleep(5)
 
-    # wait some amount of time, then record vector (and a short one - it seemed best to wait more!)
-    if detection_to_sampling_sec > 0:
-        time.sleep(detection_to_sampling_sec)
-    # now record.
-    with analogbufio.BufferedIn(board.GP26, sample_rate=sampling_rate) as adcbuf:
-        adcbuf.readinto(adc_read_buffer)
-    reset_tip_state(ground_sec=0.001, delay_after_sec=0, repeats=1)
-    # now reactivate the pull up line.
-    tip_B_pull_up_pin.switch_to_output(value=True)
-    # now wait till min touch time has passed.
-    print(f"since touch {(time.monotonic_ns() - t_now_ns)/1e6} msec")
-    while time.monotonic_ns() - t_now_ns < min_touch_nsec:
-        pass
-    # check if the tip is still pressed.
-    # (making it more foil specific for now, will need to refactor later for e.g. epee)
-    if not is_tip_depressed():
-        print("failed to find tip still pressed after checking validity, no touch.")
-        continue
-    # we have a valid touch, analyze data now.
-    # calculate power at two frequencies
-    # if this doesn't work (and it didn't do great before), will have to do pseudo -random,
-    # or split the lame generation from the detection much harder (e.g. separate hardware)
-    t_analysis_start_ns = time.monotonic_ns()
-    data = from_uint16_buffer(
-        adc_read_buffer
-    )  # faster than np.array(adc_read_buffer) ?
-    ss = spectrogram(data)
-    pow = ss[target_freq_i]
-    # use simple mean of the above and below peak frequencies.
-    off_peak_pow = 0.5 * (ss[below_peak_i] + ss[above_peak_i])
-
-    t_analysis_end_ns = time.monotonic_ns()
-    print(f"Analysis too {t_analysis_end_ns - t_analysis_start_ns} nanosec")
-    # moving the validity call to the display / control side.
-    # i avoided it in the past to shorten cycle time, but timing it at 0.2 msec on an esp32-s3
-    # in circuitpython, even with float conversions, so acceptable for now and makes debugging
-    # easier.
-    msg = f"{we_are},touched,{touch_i},{pow},{off_peak_pow}"
-    # send, willing to repeat for some amount of time.
-    send_msg(msg, t_now_ns, send_touch_for_ns)
-    time_since_press_sec = (time.monotonic_ns() - t_now_ns) / 1e9
-    # print(t_now_ns, time_since_press_sec, msg + f"; {pow=}")
-    print(t_now_ns, time_since_press_sec, msg)
-    # print(f"{time_since_press_sec=:0.4f} {dormant_after_hit_sec=:0.2f}")
-    sleep_t = dormant_after_hit_sec - time_since_press_sec
-    if sleep_t <= 0:
-        print(f"{sleep_t=} <= 0; skipping sleep.")
-    else:
-        print(f"sleeping for {sleep_t:0.3f} sec")
-        repeats = int(sleep_t / 0.01)
-        reset_tip_state(ground_sec=0, delay_after_sec=0.01, repeats=repeats)
-    post_announce_t_ns = time.monotonic_ns()
-    msg = f"{we_are},Sent hit - slept - back in business,{touch_i},None,None"
-    print(post_announce_t_ns, msg + "\n\n")
-    send_msg(msg, post_announce_t_ns)
-    touch_i += 1
+pool = socketpool.SocketPool(wifi.radio)
+print("My MAC addr:", [hex(i) for i in wifi.radio.mac_address])
+print(f"My IP address is {wifi.radio.ipv4_address}")
+our_addr_s = str(wifi.radio.ipv4_address)
+# now run.
+FencerBox()
