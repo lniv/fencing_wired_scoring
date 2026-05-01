@@ -176,11 +176,10 @@ print(f"Playing pwm at {out_freq} on {Lame_A_pin}")
 
 # i could make it take e.g. a data class instance, but i'm worried about speed
 # and don't want to bother profiling; for now there aren't many messages, so i think ok.
-def send_msg(sock, msg: str, t_msg_ns: int, send_for_nanosec: int = 0) -> bool:
+def send_msg(msg: str, t_msg_ns: int, send_for_nanosec: int = 0) -> bool:
     """
     send a message to the display - which will have to parse it; simple string.
     Args:
-        sock: socket to use for receiving / sending
         msg: send this to our display.
         t_msg_ns: when it happened, in nanosec.
         send_for_nanosec: will continue sending till t_msg + this expires, randomly.
@@ -188,54 +187,74 @@ def send_msg(sock, msg: str, t_msg_ns: int, send_for_nanosec: int = 0) -> bool:
         True if it managed to get through, False otherwise.
     """
     t_m1_ns = time.monotonic_ns()
-    buffer = bytearray(1024)
-    print(
-        f"Took {(1e-6 * (time.monotonic_ns() - t_m1_ns)):0.1f} msec to create socket."
-    )
     n_sent = 0
     try:
         # send once, then if we have time, repeat.
         while n_sent < 1 or time.monotonic_ns() - t_msg_ns < send_for_nanosec:
             t_now_ns = time.monotonic_ns()
             n_sent += 1
-            # times are in nanosec, since it's native. we usually will deal with millisec for humans.
             # dropping spaces for easier processing, at the expense of humans.
-            sock.sendto(
-                f"{t_msg_ns};{t_now_ns - t_msg_ns};{n_sent};{msg}".encode("utf-8"),
-                target_address,
+            annotated_msg = f"{t_msg_ns};{t_now_ns - t_msg_ns};{n_sent};{msg}".encode(
+                "utf-8"
             )
-            t1_ns = time.monotonic_ns()
-            print(f"{n_sent=}, {(t_now_ns - t_msg_ns)=}, {(t1_ns - t_msg_ns)=} nanosec")
+            num_sent = sock.send(annotated_msg)
+            if num_sent == 0:
+                raise OSError(128)  # not connected.
+            t2_ns = time.monotonic_ns()
+            # times are in nanosec, since it's native. we usually will deal with millisec for humans.
+            print(
+                f"Took {(1e-6 * (t2_ns - t_m1_ns)):0.1f} msec to send {annotated_msg=}, N={num_sent}."
+            )
             time.sleep(
                 random.uniform(
                     message_repeat_min_sec,
                     message_repeat_max_sec,
                 )
             )
-            # check if we got something back, if we did, we're done.
-            num_bytes, remote_address = sock.recvfrom_into(buffer)
-            if num_bytes > 0:
-                # should probably check that it came from the right address, and perhaps that something
-                # (message id?) was in it. later.
-                print(f"Received {buffer[:num_bytes]} from {remote_address}, good.")
-                break
+            # # check if we got something back, if we did, we're done.
+            # buf = bytearray(128)
+            # print("trying to receive")
+            # n_from_display = sock.recv_into(buf)
+            # print(f"Got {n_from_display=}, {buf[:n_from_display]=}")
+            # if n_from_display <= 0:
+            #     print("Socket appears closed.")
+            #     raise OSError(32)  # i know it's not exactly right, but seems closest.
+            break
 
     except OSError as e:
-        if e.args[0] == 118:  # EHOSTUNREACH ; try to reconnect
+        if e.args[0] in (
+            118,  # 118 =EHOSTUNREACH
+            128,  # 128 = ENOTCONN
+            9,  # 9= EBADF
+            32,  # 32 broken pipe
+            116,  # ETIMEDOUT
+        ):  # try to reconnect.
             print(f"Got {e=}, will try to reconnect.")
             try:
-                connect_to_display()
+                connect_to_server()
             except Exception as e:
-                print(f"Failed to reconnect due to {e}")
+                try:
+                    print(f"Failed to reconnect due to {e=}")
+                    connect_to_wifi()
+                    time.sleep(0.5)
+                    connect_to_server()
+                except Exception as e:
+                    print(f"Embarrassing, but we can't seen to connect due to {e=}")
+        else:
+            print(f"Got {e=}, not sure what to do about it.")
     except Exception as e:
-        print(f"Error sending event: {e}")
+        print(f"Error sending event: {e=}, {type(e)=}")
     return n_sent > 0
 
 
 ############## network setup
 
 
-def connect_to_display():
+def connect_to_wifi():
+    """
+    Low level connection to access point
+    Typically, this is run by the server, but not necessarily.
+    """
     ssid = settings["wifi_ssid"]
     passwd = settings["wifi_password"]
     print(f"Connecting to {ssid=}, {passwd=}")
@@ -243,10 +262,31 @@ def connect_to_display():
     print("Connected to WiFi")
 
 
+def connect_to_server() -> socketpool.Socket:
+    """
+    Connect to the display / server.
+    Returns:
+        a live socket
+    """
+    global sock
+    if isinstance(sock, socketpool.Socket):
+        print("Socket existed, closing it before recreating.")
+        sock.close()
+    sock = pool.socket(pool.AF_INET, pool.SOCK_STREAM)
+    sock.setsockopt(pool.IPPROTO_TCP, pool.TCP_NODELAY, 1)
+    # sock.settimeout(1)  # very long, in general we should get something back fast.
+    # this doesn't exist apparently?
+    # sock.setsockopt(pool.SOL_SOCKET, pool.SO_KEEPALIVE, 1)
+    print(f"Connecting to {target_address}")
+    sock.connect(target_address)
+    print("Connected.")
+    return sock
+
+
 print(f"Initial connection to display AP")
 while True:
     try:
-        connect_to_display()
+        connect_to_wifi()
         break
     except ConnectionError as e:
         print(
@@ -261,12 +301,12 @@ print("My MAC addr:", [hex(i) for i in wifi.radio.mac_address])
 #  prints IP address to REPL
 print(f"My IP address is {wifi.radio.ipv4_address}")
 our_addr_s = str(wifi.radio.ipv4_address)
-sock = pool.socket(pool.AF_INET, pool.SOCK_DGRAM)
-sock.settimeout(
-    0.0011
-)  # non blocking. (do we need to handle the exception on timeout?)
-sock.bind((our_addr_s, settings["display_port"]))
-send_msg(sock, f"{we_are},Just woke up,0,None,None", time.monotonic_ns())
+
+# i should refactor into a class
+global sock
+sock = None
+connect_to_server()
+send_msg(f"{we_are},Just woke up,0,None,None", time.monotonic_ns())
 
 
 ############## end network stuff
@@ -291,7 +331,7 @@ adc_read_buffer = array.array("H", [0x0000] * array_length)
 t0_ns = time.monotonic_ns()
 ready_msg = f"{we_are},now in business - looking for hits,0,None,None"
 print(t0_ns, ready_msg)
-send_msg(sock, ready_msg, t0_ns, 0)
+send_msg(ready_msg, t0_ns, 0)
 
 
 def reset_tip_state(ground_sec=0.001, delay_after_sec=0, repeats=1):
@@ -377,7 +417,7 @@ while True:
     # easier.
     msg = f"{we_are},touched,{touch_i},{pow},{off_peak_pow}"
     # send, willing to repeat for some amount of time.
-    send_msg(sock, msg, t_now_ns, send_touch_for_ns)
+    send_msg(msg, t_now_ns, send_touch_for_ns)
     time_since_press_sec = (time.monotonic_ns() - t_now_ns) / 1e9
     # print(t_now_ns, time_since_press_sec, msg + f"; {pow=}")
     print(t_now_ns, time_since_press_sec, msg)
@@ -392,5 +432,5 @@ while True:
     post_announce_t_ns = time.monotonic_ns()
     msg = f"{we_are},Sent hit - slept - back in business,{touch_i},None,None"
     print(post_announce_t_ns, msg + "\n\n")
-    send_msg(sock, msg, post_announce_t_ns)
+    send_msg(msg, post_announce_t_ns)
     touch_i += 1

@@ -29,6 +29,7 @@ print("en garde")
 from os import getenv
 import time
 import board
+import select
 from digitalio import DigitalInOut, Pull
 import pwmio
 
@@ -460,18 +461,18 @@ class WirelessFencingStatus(FencingStaus):
             ssid=settings["wifi_ssid"], password=settings["wifi_password"]
         )
         print(f"Created access point {settings['wifi_ssid']}")
-        pool = socketpool.SocketPool(wifi.radio)
-        self.sock = pool.socket(pool.AF_INET, pool.SOCK_DGRAM)
-        # setting timeout to 0.001 sec or below gets me an OSError(11)
-        # a larger time gets me a timeout error (when there is no data)
-        # which is more useful.
-        self.sock.settimeout(
-            0.0011
-        )  # non blocking. (do we need to handle the exception on timeout?)
+        self.pool = socketpool.SocketPool(wifi.radio)
+        self.sock = self.pool.socket(self.pool.AF_INET, self.pool.SOCK_STREAM)
+        self.sock.setsockopt(self.pool.SOL_SOCKET, self.pool.SO_REUSEADDR, 1)
         self.sock.bind((settings["display_ip"], settings["display_port"]))
+        self.sock.listen(4)
+        self.sock.setblocking(False)
+        # should we set a timeout? or does no blocking preclude that in any case?
+        self.clients = []
+        self.buffer = bytearray(1024)
 
         print(
-            f"Listening for UDP packets at ({settings['display_ip']}:{settings['display_port']})"
+            f"Listening for packets at ({settings['display_ip']}:{settings['display_port']})"
         )
         self.last_action_i = {"right": 0, "left": 0}
 
@@ -483,23 +484,27 @@ class WirelessFencingStatus(FencingStaus):
         """
         buffer = bytearray(1024)
         t0 = time.monotonic_ns()
-        # hard limit to 0.1 sec
+
+        read_set = [c["sock"] for c in self.clients]
         while time.monotonic_ns() - t0 < timeout_ns:
-            try:
-                num_bytes = self.sock.recv_into(buffer)
-                # i may comment this out once stable.
-                if num_bytes > 0:
+            have_bytes, _, _ = select.select(
+                read_set, [], [], 0.1
+            )  # too long of a timeout? should this be more like 0.01 sec?
+            if len(have_bytes) < 1:
+                break
+            for sock in have_bytes:
+                try:
+                    num_bytes = sock.recv_into(self.buffer, 512)
                     print(
-                        f"{time.monotonic_ns()/1e9:0.2f} post action, found {num_bytes} in sockets; {buffer[:num_bytes]=}"
+                        f"{time.monotonic_ns()/1e9:0.2f} post action, found {num_bytes} in {sock=}; {buffer[:num_bytes]=}"
                     )
-                else:
-                    break
-            except OSError as e:
-                if e.args[0] != 116:  # ETIMEDOUT as expected.
-                    raise (e)
-                else:
-                    # if we have a timeout, we're done.
-                    break
+                except OSError as e:
+                    if not e.args[0] == 128:  # ENOTCONN
+                        print(
+                            f"Dead client with socket {have_bytes}, will get dropped next time."
+                        )
+                    elif not e.args[0] != 116:  # ETIMEDOUT as expected.
+                        raise (e)
 
     def end_action(self):
         super().end_action()
@@ -507,110 +512,164 @@ class WirelessFencingStatus(FencingStaus):
         self._dump_packets(timeout_ns=1e8)
         print("socket clear, reset finished\n\n")
 
+    def _make_client(self, conn, addr):
+        conn.setsockopt(self.pool.IPPROTO_TCP, self.pool.TCP_NODELAY, 1)
+        # this doesn't exist in circuitpython apparently?
+        # conn.setsockopt(
+        #     self.pool.SOL_SOCKET, self.pool.SO_KEEPALIVE, 1
+        # )  # OS-level keepalive
+        conn.setblocking(False)
+        # FIXME: what an odd structure; a dict that we add to a list, and then we need to iterate on the list ; arghhh
+        # why not add to a dictionary with the address as the key? it's not like i can really have two with the same address.
+        return {"sock": conn, "addr": addr}
+
     def _check_for_hit(self, now_msec):
+        read_set = [self.sock] + [c["sock"] for c in self.clients]
+        try:
+            readable, _, _ = select.select(read_set, [], [], 0.001)
+        except OSError:
+            readable = []
+
+        # we could handle the receiver socket outside, not sure what is easier.
+        # also not sure the claude construct is a bit too oyver hoychem.
+        dead_clients = []
+        for source in readable:
+            if source is self.sock:
+                try:
+                    conn, addr = self.sock.accept()
+                    self.clients.append(self._make_client(conn, addr))
+                    print(f"Client connected: {addr=}")
+                except OSError as e:
+                    print(f"Accept error: {e=}")
+                continue
+            # there really is only one that should match?
+            # but i didn't like the claude setup.
+            # seems slow either way, lets start this way.
+            for client in self.clients:
+                if client["sock"] is source:
+                    try:
+                        num_bytes = source.recv_into(self.buffer, 512)
+                        print(f"{num_bytes=}")
+                        if num_bytes == 0:
+                            print(f"connection closed for {client=}")
+                            dead_clients.append(client)
+                        else:
+                            print(f"Message from {client=}")
+                            self._handle_packet(
+                                source, self.buffer[:num_bytes].decode("utf-8")
+                            )
+                    except OSError as e:
+                        if e.args[0] in (118, 128):  # 118= EHOSTUNREACH, 128 = ENOTCONN
+                            print(f"Got {e=}, dropping client")
+                            dead_clients.append(client)
+                        else:
+                            raise
+                    except Exception as e:
+                        print(f"Did not expect {e=}, closing {client=}")
+                        dead_clients.append(client)
+                    finally:
+                        break  # there shall be only one.
+            # now clean dead wood.
+            for client in dead_clients:
+                try:
+                    client["sock"].close()
+                except OSError:
+                    pass
+                self.clients.remove(client)
+
+    def _handle_packet(self, source: socketpool.Socket, data: str):
+        """
+        Handle data
+        Args:
+            source: a socket we got the data from, in case we want to reply.
+            data: what we got.
+        """
+        recv_ns = time.monotonic_ns()  # probably should be done earlier, FIXME
+        # # first, acknowledge
+        # source.send("Acknowledged.")
         # NOTE: i'm going to ignore the time we entered (now_msec).
         # it seems the dominant time is the receive, despite the short timeout.
-        try:
-            # t_pre_buff_ns = time.monotonic_ns()
-            buffer = bytearray(1024)
-            # todo: time this (the buffer etc creation.), if i can.
-            num_bytes, remote_address = self.sock.recvfrom_into(buffer)
-            recv_ns = time.monotonic_ns()
-            if num_bytes > 0:
-                data = buffer[:num_bytes].decode(
-                    "utf-8"
-                )  # Slice the buffer to the actual data length
-                # we get e.g.
-                # 11509622741708;40710445;1;right,touched,74,804336.0,7.65303e+08
-                t_sent, dt_ns, repeat_i, msg = data.split(";")
-                side, action, action_i, pow_s, off_peak_pow_s = msg.split(",")
-                if not side in ("right", "left"):
-                    raise ValueError(f"{msg} must start with right or left.")
-                if action == "touched":
-                    action_i = int(action_i)
-                    # check that we can't accidentally invalidate something when we reset the fencer boxes?
-                    # FIXME : bug here (not an issue before due to long lock out time)
-                    # the box is sending a next hit from its perspective, but we're still in the same cycle!
-                    # if we announced, don't process!
-                    if self.status[side]["announced"]:
-                        # the fencer box may be alive (and send a "new" hit) before the action ends.
-                        # Can be avoided by having a box side timeout that's longer than the display's,
-                        # but that's annoying in practice, or by communicating bidirectionally,
-                        # which i'd like to avoid for now - harder to debug.
-                        return
-                    if self.last_action_i[side] != action_i:
-                        # now figure out if it's valid.
-                        # t0_ns = time.monotonic_ns()
-                        # print(
-                        #     f"we got {side=}, {action=}, {pow_s=}, {base_pow_s=}, {repeat_i=} (at {t_sent})"
-                        # )
-                        # t_print_ns = time.monotonic_ns()
-                        # first, ensure we don't handle this one again.
-                        # (i could change this, but the case where we get a later message
-                        # with a better time seems far fetched.)
-                        self.last_action_i[side] = action_i
-                        # NOTE: using the time stamp at the end of the receive call
-                        # dt_msec = float(dt_ns) * 1e-6
-                        # time_of_hit = now_msec - dt_msec
-                        time_of_hit = (recv_ns - float(dt_ns)) * 1e-6
-                        # if the other side announced, see if we're within the valid time!
-                        other_side = "left" if side == "right" else "right"
-                        if self.status[other_side]["touch_started_msec"] is not None:
-                            other_side_time_of_hit = self.status[other_side][
-                                "touch_started_msec"
-                            ]
-                            if time_of_hit - other_side_time_of_hit > lockout_msec:
-                                print(
-                                    f"{side} reported hit at {time_of_hit:0.1f} msec, but {other_side} hit at {other_side_time_of_hit:0.1f} msec, MOVE FASTER."
-                                )
-                                return
-                        self.status[side]["touch_started_msec"] = time_of_hit
-                        # t_pre_valid_check_ns = time.monotonic_ns()
-                        pow = float(pow_s)
-                        off_peak_pow = float(off_peak_pow_s)
-                        # compromise of signal strength and peak prominence.
-                        # require high prominence from marginal signal, but accept
-                        # lesser prominence from stronger ones
-                        # timed this at below 0.25 msec
-                        # t_pre = time.monotonic_ns()
-                        pow_to_off_peak_ratio = pow / off_peak_pow
-                        pow_to_threshold_ratio = pow / self.min_valid_power
-                        goodness = pow_to_off_peak_ratio * pow_to_threshold_ratio
-                        self.status[side]["valid"] = (
-                            pow_to_threshold_ratio > 1
-                            and goodness >= self.min_valid_weighted_ratio
-                        )
-                        # t_post = time.monotonic_ns()
-                        # print(f"{(t_post - t_pre)=}")
+        print(f"{data=}")
+        # we get e.g.
+        # 11509622741708;40710445;1;right,touched,74,804336.0,7.65303e+08
+        t_sent, dt_ns, repeat_i, msg = data.split(";")
+        side, action, action_i, pow_s, off_peak_pow_s = msg.split(",")
+        if not side in ("right", "left"):
+            raise ValueError(f"{msg} must start with right or left.")
+        if action == "touched":
+            action_i = int(action_i)
+            # check that we can't accidentally invalidate something when we reset the fencer boxes?
+            # FIXME : bug here (not an issue before due to long lock out time)
+            # the box is sending a next hit from its perspective, but we're still in the same cycle!
+            # if we announced, don't process!
+            if self.status[side]["announced"]:
+                # the fencer box may be alive (and send a "new" hit) before the action ends.
+                # Can be avoided by having a box side timeout that's longer than the display's,
+                # but that's annoying in practice, or by communicating bidirectionally,
+                # which i'd like to avoid for now - harder to debug.
+                return
+            if self.last_action_i[side] != action_i:
+                # now figure out if it's valid.
+                # t0_ns = time.monotonic_ns()
+                # print(
+                #     f"we got {side=}, {action=}, {pow_s=}, {base_pow_s=}, {repeat_i=} (at {t_sent})"
+                # )
+                # t_print_ns = time.monotonic_ns()
+                # first, ensure we don't handle this one again.
+                # (i could change this, but the case where we get a later message
+                # with a better time seems far fetched.)
+                self.last_action_i[side] = action_i
+                # NOTE: using the time stamp at the end of the receive call
+                # dt_msec = float(dt_ns) * 1e-6
+                # time_of_hit = now_msec - dt_msec
+                time_of_hit = (recv_ns - float(dt_ns)) * 1e-6
+                # if the other side announced, see if we're within the valid time!
+                other_side = "left" if side == "right" else "right"
+                if self.status[other_side]["touch_started_msec"] is not None:
+                    other_side_time_of_hit = self.status[other_side][
+                        "touch_started_msec"
+                    ]
+                    if time_of_hit - other_side_time_of_hit > lockout_msec:
                         print(
-                            f"{pow=}, {off_peak_pow=}, {(pow_to_off_peak_ratio)=:0.2f}"
+                            f"{side} reported hit at {time_of_hit:0.1f} msec, but {other_side} hit at {other_side_time_of_hit:0.1f} msec, MOVE FASTER."
                         )
-                        # t_post_valid_check_ns = time.monotonic_ns()
-                        self.announce(side)
-                        # post_announce_t_ns = time.monotonic_ns()
-                        # commenting this out, but it does seem i have ~ 130 msec worst case
-                        # between the start of the cycle and the end?, so shifted to using receive time.
-                        # print_s = f"\
-                        #     {(t_post_valid_check_ns - t_pre_valid_check_ns)=}\n\
-                        #     {(t_print_ns - t0_ns)=}\n\
-                        #     {(recv_ns - now_msec * 1e6)=}\n\
-                        #     {(t_pre_buff_ns - now_msec * 1e6)=}\n\
-                        #     {(recv_ns - t_pre_buff_ns)=}\n\
-                        #     {(post_announce_t_ns - now_msec * 1e6)=}"
-                        # print(print_s)
-                        # decided against this, especially since we now won't resend if we got confirmation.
-                        # self._dump_packets(1e4)
-                else:
-                    print(
-                        f"Got {data=} from {remote_address}, not a touch, no special handling."
-                    )
-                # if we're here, we got a valid message; we should acknowledge it.
-                self.sock.sendto(f"Received {msg}", remote_address)
-        except OSError as e:
-            if e.args[0] != 116:  # ETIMEDOUT as expected.
-                raise (e)
-        except Exception as e:
-            print(f"Error during reception: {e}")
+                        return
+                self.status[side]["touch_started_msec"] = time_of_hit
+                # t_pre_valid_check_ns = time.monotonic_ns()
+                pow = float(pow_s)
+                off_peak_pow = float(off_peak_pow_s)
+                # compromise of signal strength and peak prominence.
+                # require high prominence from marginal signal, but accept
+                # lesser prominence from stronger ones
+                # timed this at below 0.25 msec
+                # t_pre = time.monotonic_ns()
+                pow_to_off_peak_ratio = pow / off_peak_pow
+                pow_to_threshold_ratio = pow / self.min_valid_power
+                goodness = pow_to_off_peak_ratio * pow_to_threshold_ratio
+                self.status[side]["valid"] = (
+                    pow_to_threshold_ratio > 1
+                    and goodness >= self.min_valid_weighted_ratio
+                )
+                # t_post = time.monotonic_ns()
+                # print(f"{(t_post - t_pre)=}")
+                print(f"{pow=}, {off_peak_pow=}, {(pow_to_off_peak_ratio)=:0.2f}")
+                # t_post_valid_check_ns = time.monotonic_ns()
+                self.announce(side)
+                # post_announce_t_ns = time.monotonic_ns()
+                # commenting this out, but it does seem i have ~ 130 msec worst case
+                # between the start of the cycle and the end?, so shifted to using receive time.
+                # print_s = f"\
+                #     {(t_post_valid_check_ns - t_pre_valid_check_ns)=}\n\
+                #     {(t_print_ns - t0_ns)=}\n\
+                #     {(recv_ns - now_msec * 1e6)=}\n\
+                #     {(t_pre_buff_ns - now_msec * 1e6)=}\n\
+                #     {(recv_ns - t_pre_buff_ns)=}\n\
+                #     {(post_announce_t_ns - now_msec * 1e6)=}"
+                # print(print_s)
+                # decided against this, especially since we now won't resend if we got confirmation.
+                # self._dump_packets(1e4)
+        else:
+            print(f"Got {data=}, not a touch, no special handling.")
 
 
 # actually execute stuff...
