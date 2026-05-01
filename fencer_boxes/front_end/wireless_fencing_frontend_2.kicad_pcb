@@ -3708,8 +3708,8 @@
 				)
 			)
 		)
-		(property "Value" "10uF"
-			(at -0.35 1.6 0)
+		(property "Value" "250uF"
+			(at -0.45 1.6 0)
 			(layer "F.SilkS")
 			(uuid "20ac4cc2-da4a-4451-9e83-adc8d83c46d6")
 			(effects
