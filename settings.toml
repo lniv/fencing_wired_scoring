@@ -39,6 +39,7 @@ delay_before_display_reset_msec = 1000
 # reference :
 # FIE material rules : https://static.fie.org/uploads/34/172612-book%20m%20ang.pdf
 lockout_msec = 300
+# if non zero, will repeat sending messages.
 send_touch_for_msec = 60
 sampling_end_to_min_touch_msec = 1
 # technically 14+-1 msec.
